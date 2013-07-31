@@ -1,4 +1,0 @@
-tm
-==
-
-tmux manager

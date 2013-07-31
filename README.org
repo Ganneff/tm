@@ -1,0 +1,150 @@
+* tm - tmux manager / helper
+
+This is a medium sized shell script of mine, used to ease my
+day-to-day work with [[http://tmux.sourceforge.net/][tmux].
+It allows easy handling of various types of tmux sessions, as well as
+complex setups.
+
+** The boring stuff, license / copyright
+Copyright (C) 2011, 2012, 2013 Joerg Jaspert <joerg@debian.org>
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions
+are met:
+.
+1. Redistributions of source code must retain the above copyright
+   notice, this list of conditions and the following disclaimer.
+2. Redistributions in binary form must reproduce the above copyright
+   notice, this list of conditions and the following disclaimer in the
+   documentation and/or other materials provided with the distribution.
+.
+THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
+IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
+IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT,
+INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
+NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+(INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
+THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+* Usage
+As tm started as a very small wrapper around tmux, there wasn't much
+commandline parsing. Later on it got a getopts style interface tacked
+onto, so now there is a traditional and a getopts style way of
+using it. Personally I like the traditional one more...
+
+- Traditional :: /home/joerg/bin/tm CMD [host]...
+- Getopts :: /home/joerg/bin/tm [-s host] [-m hostlist] [-l] [-n] [-h] [-c config] [-e]
+
+** Traditional
+#+BEGIN_QUOTE
+/home/joerg/bin/tm CMD [host]...
+#+END_QUOTE
+
+CMD is one of
+ + ls ::  List running sessions
+ + s  ::  Open ssh session to host
+ + ms ::  Open multi ssh sessions to hosts, synchronizing input
+          - If you need to open a second session to the same set of
+            hosts (and not just want to be dropped back into the
+            already existing session), put a -m in front of ms,
+            ie. as first parameter to tm.
+ + $anything ::  Either plain tmux session with name of $anything or
+                 session according to a TMDIR file
+
+** Getopts
+#+BEGIN_QUOTE
+/home/joerg/bin/tm [-s host] [-m hostlist] [-l] [-n] [-h] [-c config] [-e]
+#+END_QUOTE
+
+Options:
++ -l ::           List running sessions
++ -s host ::      Open ssh session to host
++ -m hostlist ::  Open multi ssh sessions to hosts, synchronizing input
+                  - Due to the way getopts works, hostlist must be enclosed in ""
++ -n  ::          Open a second session to the same set of hosts
++ -c config  ::   Setup session according to TMDIR file
++ -e SESSION  ::  Use existion session named SESSION
+
+
+** TMDIR files
+Each file in $TMDIR, which defaults to =~/.tmux.d/=, defines a tmux
+session. There are two types of files, those without an extension and
+those with the extension =.cfg=.  The filename corresponds to the
+commandline =$anything= (or =-c=).
+
+*** Extensionless TMDIR files
+- First line :: Session name
+- Second line :: extra tmux commandline options
+- Any following line :: A hostname to open a shell with in the normal
+  ssh syntax. (ie [user@]hostname)
+
+*** .cfg TMDIR files
+- First line :: Session name
+- Second line :: extra tmux commandline options
+- Third line :: The new-session command to use. Place NONE here if you
+        want plain defaults, though that may mean just a shell. Otherwise
+        put the full new-session command with all options you want here.
+- Any following line :: Any tmux command you can find in the tmux
+  manpage. You should ensure that commands arrive at the right tmux
+  session / window. To help you with this, there are some variables
+  available which you can use, they are replaced with values right
+  before commands are executed:
+    - SESSION :: replaced with the session name
+    - TMWIN :: see below for explanation of TMWIN Environment variable
+
+** Environment variables recognized by this script:
+- TMPDIR     :: Where tmux stores its session information. DEFAULT: If unset: /tmp
+- TMSORT :: Should ms sort the hostnames, so it always opens the same
+  session, no matter in which order hostnames are presented. DEFAULT: true
+- TMOPTS :: Extra options to give to the tmux call. Note that this
+  ONLY affects the final tmux call to attach to the session, not to
+  the earlier ones creating it. DEFAULT: -2
+- TMDIR      :: Where are session information files stored. DEFAULT: /$HOME/.tmux.d
+- TMWIN :: Where does your tmux starts numbering its windows? This
+  script tries to find the information in your config, but as it only
+  checks /$HOME/.tmux.conf it might fail. So if your window
+  numbers start at anything different to 0, like mine do at 1, then
+  you can set TMWIN to 1
+- TMSESSHOST :: Should the hostname appear in session names? DEFAULT: true
+
+* Example usage
+You can find two example config files in the =examples/= subdir of
+this git repository.
+
+The first, =logmon.cfg=, defines a slightly more complex tmux session
+by giving full tmux commands. It will open a session called logmon,
+connect to two hosts and run some logmon program there. The tmux
+window will be split into two panes, their input will be synchronized,
+so both hosts are controlled at the same time. Additionally some
+window options are set, and the layout switched to evenly give both
+hosts window space.
+
+The second, =ws=, is an easy file. It defines a session called
+workstations, and simply opens a tmux window split into multiple
+panes connecting to a number of workstation hosts. The layout will be
+tiled and the input will be synchronized, so all hosts are controlled
+at the same time.
+
+A similar session than the above second example can be started by
+using
+#+BEGIN_SRC shell
+tm ms ws02 ws03 ws04 [...]
+#+END_SRC
+with the only difference that this needs more typing, so for repeated
+usage putting it into a file is easier.
+
+A command of
+#+BEGIN_SRC shell
+tm s user@host
+#+END_SRC
+will open a single ssh session to the given user@host. Later on
+repeating this command will attach to the old session.
+
+* Completion
+For zsh users tab completion is available. Simply copy the file =_tm=
+to the right place.
+This is more likely alpha quality completion, feel free to send
+patches to make it better. :)

@@ -1,0 +1,101 @@
+#compdef tm
+#autoload
+
+# Copyright (c) 2013 Joerg Jaspert
+# Author: Joerg Jaspert <joerg@debian.org>
+#
+# Redistribution and use in source and binary forms, with or without
+# modification, are permitted provided that the following conditions
+# are met:
+# .
+# 1. Redistributions of source code must retain the above copyright
+#    notice, this list of conditions and the following disclaimer.
+# 2. Redistributions in binary form must reproduce the above copyright
+#    notice, this list of conditions and the following disclaimer in the
+#    documentation and/or other materials provided with the distribution.
+# .
+# THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
+# IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+# OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
+# IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT,
+# INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
+# NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+# DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+# THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+# (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
+# THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+zmodload zsh/mapfile
+local expl state curcontext="$curcontext"
+_tm_done=0
+_tm_sess=0
+
+function _tm_get_sessions {
+    typeset -ag _tm_sessions
+    if out=$(tmux list-sessions -F "#{session_name}" 2>/dev/null); then
+        for sess in ${=out}; do
+            _tm_sessions+="${sess}:Existing session ${sess}"
+        done
+    fi
+    _tm_done=1
+    _tm_sess=$#_tm_sessions
+
+    local TMDIR=${TMDIR:-"${HOME}/.tmux.d"}
+    for file in ${TMDIR}/*; do
+        _tm_sessions+=${file##*/}:${(f)${(f)mapfile[$file]}[1]}
+    done
+}
+
+function _tm_action {
+    typeset -a actions
+    if [[ $_tm_sess -ne $(tmux list-sessions|wc -l) ]]; then
+        _tm_get_sessions
+    fi
+    ((_tm_done)) || _tm_get_sessions
+    actions=(
+        'ls:List running sessions'
+        's:Open ssh session to a single host'
+        'ms:Open ssh session to multiple hosts'
+        '-l:List running sessions'
+        '-s:Open ssh session to a single host'
+        '-m:Open ssh session to multiple hosts'
+        '-e:use existing session'
+        ${_tm_sessions[@]}
+    )
+    _describe action actions
+}
+
+function _tm_arguments() {
+    case ${words[1]} in
+        s)
+            _arguments '::hostname:_hosts'
+            ;;
+        ms)
+            _arguments -C '*:hostnames:->hosts'
+            ;;
+        *)
+            echo "lala"
+            ;;
+    esac
+}
+
+function _tm() {
+    _arguments -s\
+        '-n[Open new multisession even if same exists]' \
+        '-c+[Setup session according to TMDIR file]:session: ' \
+        ':action:_tm_action' \
+        ':session:->session' \
+        '*::arguments:_tm_arguments'
+
+    case $state in
+        hosts)
+            _description hosts expl "hosts"
+            _wanted hosts expl hostname _hosts && return
+            ;;
+        session)
+            echo "ohmy"
+            ;;
+    esac
+}
+
+_tm "$@"
