@@ -211,10 +211,16 @@ function ssh_sessname() {
 
 # Setup functions for all tmux commands
 function setup_command_aliases() {
+    set -x
     local command
+    local SESNAME
+    SESNAME="tmlscm$$"
+    # Debian Bug #718777 - tmux needs a session to have lscm work
+    tmux new-session -d -s ${SESNAME} -n "check" "sleep 3"
     for command in $(tmux list-commands|awk '{print $1}'); do
         eval "$(echo "tm_$command() { tmux $command \"\$@\" >/dev/null; }")"
     done
+    tmux kill-session -t ${SESNAME} || true
 }
 
 # Run a command (function) after replacing variables
