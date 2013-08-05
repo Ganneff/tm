@@ -1,7 +1,7 @@
 * tm - tmux manager / helper
 
 This is a medium sized shell script of mine, used to ease my
-day-to-day work with [[http://tmux.sourceforge.net/][tmux].
+day-to-day work with [[http://tmux.sourceforge.net/][tmux]].
 It allows easy handling of various types of tmux sessions, as well as
 complex setups.
 
