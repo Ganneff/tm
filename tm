@@ -35,6 +35,9 @@ set -E
 # The following variables can be overwritten outside the script.
 #
 
+# Allow us to define custom ssh command line options.
+declare -r SSHCMD=${SSHCMD:-"ssh"}
+
 # We want a useful tmpdir, so set one if it isn't already.  Thats the
 # place where tmux puts its socket, so you want to ensure it doesn't
 # change under your feet - like for those with a daily-changing tmpdir
@@ -410,7 +413,7 @@ if ! tmux has-session -t ${SESSION} 2>/dev/null; then
     case ${cmdline} in
         s)
             # The user wants to open ssh to one or more hosts
-            tmux new-session -d -s ${SESSION} -n "${1}" "ssh ${1}"
+            tmux new-session -d -s ${SESSION} -n "${1}" "${SSHCMD} ${1}"
             # We disable any automated renaming, as that lets tmux set
             # the pane title to the process running in the pane. Which
             # means you can end up with tons of "bash". With this
@@ -424,7 +427,7 @@ if ! tmux has-session -t ${SESSION} 2>/dev/null; then
             shift
             count=2
             while [ $# -gt 0 ]; do
-                tmux new-window -d -t ${SESSION}:${count} -n "${1}" "ssh ${1}"
+                tmux new-window -d -t ${SESSION}:${count} -n "${1}" "${SSHCMD} ${1}"
                 tmux set-window-option -t ${SESSION}:${count} automatic-rename off >/dev/null
                 # If we have at least tmux 1.7, allow-rename works, such also disabling
                 # any rename based on shell escape codes.
@@ -439,10 +442,10 @@ if ! tmux has-session -t ${SESSION} 2>/dev/null; then
             # We open a multisession window. That is, we tile the window as many times
             # as we have hosts, display them all and have the user input send to all
             # of them at once.
-            tmux new-session -d -s ${SESSION} -n "Multisession" "ssh ${1}"
+            tmux new-session -d -s ${SESSION} -n "Multisession" "${SSHCMD} ${1}"
             shift
             while [ $# -gt 0 ]; do
-                tmux split-window -d -t ${SESSION}:${TMWIN} "ssh ${1}"
+                tmux split-window -d -t ${SESSION}:${TMWIN} "${SSHCMD} ${1}"
                 # Always have tmux redo the layout, so all windows are evenly sized.
                 # Otherwise you quickly end up with tmux telling you there is no
                 # more space available for tiling - and also very different amount
@@ -478,13 +481,13 @@ if ! tmux has-session -t ${SESSION} 2>/dev/null; then
                     done
                 else
                     # So lets start with the "first" line, before dropping into a loop
-                    tmux new-session -d -s ${SESSION} -n "${TMDATA[0]}" "ssh ${TMDATA[2]}"
+                    tmux new-session -d -s ${SESSION} -n "${TMDATA[0]}" "${SSHCMD} ${TMDATA[2]}"
 
                     tmcount=${#TMDATA[@]}
                     index=3
                     while [ ${index} -lt ${tmcount} ]; do
                         # List of hostnames, open a new connection per line
-                        tmux split-window -d -t ${SESSION}:${TMWIN} "ssh ${TMDATA[$index]}"
+                        tmux split-window -d -t ${SESSION}:${TMWIN} "${SSHCMD} ${TMDATA[$index]}"
                         # Always have tmux redo the layout, so all windows are evenly sized.
                         # Otherwise you quickly end up with tmux telling you there is no
                         # more space available for tiling - and also very different amount
