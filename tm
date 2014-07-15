@@ -395,7 +395,7 @@ if [[ ${DOUBLENAME} == true ]] && tmux has-session -t ${SESSION} 2>/dev/null; th
 fi
 
 if [[ ${TMSESSHOST} = true ]]; then
-    declare -r SESSION="$(hostname -s)_${SESSION}"
+    declare -r SESSION="$(uname -n|cut -d. -f1)_${SESSION}"
 else
     declare -r SESSION
 fi
