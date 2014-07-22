@@ -418,7 +418,7 @@ if ! tmux has-session -t ${SESSION} 2>/dev/null; then
             tmux set-window-option -t ${SESSION} automatic-rename off >/dev/null
             # If we have at least tmux 1.7, allow-rename works, such also disabling
             # any rename based on shell escape codes.
-            if [ ${TMUXMINOR} -ge 7 ] || [ ${TMUXMAJOR} -gt 1 ]; then
+            if [ ${TMUXMINOR//[!0-9]/} -ge 7 ] || [ ${TMUXMAJOR//[!0-9]/} -gt 1 ]; then
                 tmux set-window-option -t ${SESSION} allow-rename off >/dev/null
             fi
             shift
@@ -428,7 +428,7 @@ if ! tmux has-session -t ${SESSION} 2>/dev/null; then
                 tmux set-window-option -t ${SESSION}:${count} automatic-rename off >/dev/null
                 # If we have at least tmux 1.7, allow-rename works, such also disabling
                 # any rename based on shell escape codes.
-                if [ ${TMUXMINOR} -ge 7 ] || [ ${TMUXMAJOR} -gt 1 ]; then
+                if [ ${TMUXMINOR//[!0-9]/} -ge 7 ] || [ ${TMUXMAJOR//[!0-9]/} -gt 1 ]; then
                     tmux set-window-option -t ${SESSION}:${count} allow-rename off >/dev/null
                 fi
                 count=$(( count + 1 ))
