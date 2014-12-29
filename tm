@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Copyright (C) 2011, 2012, 2013 Joerg Jaspert <joerg@debian.org>
+# Copyright (C) 2011, 2012, 2013, 2014 Joerg Jaspert <joerg@debian.org>
 #
 # Redistribution and use in source and binary forms, with or without
 # modification, are permitted provided that the following conditions
@@ -211,7 +211,6 @@ function ssh_sessname() {
 
 # Setup functions for all tmux commands
 function setup_command_aliases() {
-    set -x
     local command
     local SESNAME
     SESNAME="tmlscm$$"
@@ -240,8 +239,8 @@ function own_config() {
         setup_command_aliases
     fi
     # Set IFS to be NEWLINE only, not also space/tab, as our input files
-    # are \n seperated (one entry per line) and lines may well have spaces
-    IFS="
+    # are \n seperated (one entry per line) and lines may well have spaces.
+    local IFS="
 "
     # Fill an array with our config
     TMDATA=( $(cat "${TMDIR}/$1") )
@@ -253,6 +252,46 @@ function own_config() {
     if [ "${TMDATA[1]}" != "NONE" ]; then
         TMOPTS=${TMDATA[1]}
     fi
+
+    # Seperate the lines we work with
+    local IFS=""
+    local workdata=(${TMDATA[@]:2})
+    IFS=${OLDIFS}
+
+    # Lines (starting with line 3) may start with LIST, then we get
+    # the list of hosts from elsewhere. So if one does, we exec the
+    # command given, then append the output to TMDATA - while deleting
+    # the actual line with LIST in.
+
+    TMPDATA=$(mktemp -u -p ${TMPDIR} .tmux_tm_XXXXXXXXXX)
+    trap "rm -f ${TMPDATA}" EXIT ERR HUP INT QUIT TERM
+
+    index=0
+    while [[ ${index} -lt ${#workdata[@]} ]]; do
+        if [[ "${workdata[${index}]}" =~ ^LIST\ (.*)$ ]]; then
+            # printf -- 'workdata: %s\n' "${workdata[@]}"
+            cmd=${BASH_REMATCH[1]}
+            echo "Line ${index}: Fetching hostnames using provided shell command '${cmd}', please stand by..."
+
+            $( ${cmd} >| "${TMPDATA}" )
+
+            # Set IFS to be NEWLINE only, not also space/tab, the list may have ssh options
+            # and what not, so \n is our seperator, not more.
+            IFS="
+"
+            out=( $(cat "${TMPDATA}") )
+            # Restore IFS
+            IFS=${OLDIFS}
+
+            unset workdata[${index}]
+            workdata=( "${workdata[@]}" "${out[@]}" )
+            unset out
+            # printf -- 'workdata: %s\n' "${workdata[@]}"
+        fi
+        index=$(( index + 1 ))
+    done
+    rm -f "${TMPDATA}"
+    TMDATA=( "${TMDATA[@]:0:2}" "${workdata[@]}"  )
 }
 
 # Simple overview of running sessions
