@@ -82,7 +82,7 @@ function _tm_arguments() {
 function _tm() {
     _arguments -s\
         '-n[Open new multisession even if same exists]' \
-        '-c+[Setup session according to TMDIR file]:session: ' \
+        '-c+[Setup session according to TMDIR file]:_tm_sessions: ' \
         ':action:_tm_action' \
         ':session:->session' \
         '*::arguments:_tm_arguments'
