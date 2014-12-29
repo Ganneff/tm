@@ -6,7 +6,7 @@ It allows easy handling of various types of tmux sessions, as well as
 complex setups.
 
 ** The boring stuff, license / copyright
-Copyright (C) 2011, 2012, 2013 Joerg Jaspert <joerg@debian.org>
+Copyright (C) 2011, 2012, 2013, 2014 Joerg Jaspert <joerg@debian.org>
 
 Redistribution and use in source and binary forms, with or without
 modification, are permitted provided that the following conditions
@@ -95,14 +95,22 @@ commandline =$anything= (or =-c=).
     - SESSION :: replaced with the session name
     - TMWIN :: see below for explanation of TMWIN Environment variable
 
+*** External listings of hostnames
+For both types of TMDIR files the hostname/command lines may start
+with the word LIST. Everything after it is taken as a shell command
+and executed as given. The output is read in line by line and added to
+the list of hostnames/commands already given.
+
+This feature works recursive, so be careful to not build a loop!
+
 ** Environment variables recognized by this script:
-- TMPDIR     :: Where tmux stores its session information. DEFAULT: If unset: /tmp
+- TMPDIR :: Where tmux stores its session information. DEFAULT: If unset: /tmp
 - TMSORT :: Should ms sort the hostnames, so it always opens the same
   session, no matter in which order hostnames are presented. DEFAULT: true
 - TMOPTS :: Extra options to give to the tmux call. Note that this
   ONLY affects the final tmux call to attach to the session, not to
   the earlier ones creating it. DEFAULT: -2
-- TMDIR      :: Where are session information files stored. DEFAULT: /$HOME/.tmux.d
+- TMDIR :: Where are session information files stored. DEFAULT: /$HOME/.tmux.d
 - TMWIN :: Where does your tmux starts numbering its windows? This
   script tries to find the information in your config, but as it only
   checks /$HOME/.tmux.conf it might fail. So if your window
@@ -111,7 +119,7 @@ commandline =$anything= (or =-c=).
 - TMSESSHOST :: Should the hostname appear in session names? DEFAULT: true
 
 * Example usage
-You can find two example config files in the =examples/= subdir of
+You can find three example config files in the =examples/= subdir of
 this git repository.
 
 The first, =logmon.cfg=, defines a slightly more complex tmux session
@@ -135,6 +143,14 @@ tm ms ws02 ws03 ws04 [...]
 #+END_SRC
 with the only difference that this needs more typing, so for repeated
 usage putting it into a file is easier.
+
+The third file, =ganetivms=, uses the syntax of the easy files, but
+only has one hostname defined statically (including a different
+username than normal) and gets most of the hostnames by first asking a
+/ganetimaster/ instance for machines that are tagged /foo/ and /bar/
+and then adding the contents of a /morehosts.list/ file. Should
+/morehosts.list/ contain another *LIST* line, it would also execute it
+and use append its output to the hostlist.
 
 A command of
 #+BEGIN_SRC shell

@@ -1,0 +1,5 @@
+vm_foobar
+NONE
+LIST ssh ganetimaster sudo /usr/sbin/gnt-instance list --no-headers -o name --filter '("foo" in tags and "bar" in tags)'
+user@anothermachine
+LIST cat /home/user/morehosts.list

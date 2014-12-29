@@ -161,6 +161,10 @@ function usage() {
     echo "              SESSION - replaced with the session name"
     echo "              TMWIN   - see below for explanation of TMWIN Environment variable"
     echo ""
+    echo "NOTE: Both types of files accept external listings of hostnames."
+    echo "      That is, the output of any shell command given will be used as a list"
+    echo "      of hostnames to connect to (or a set of tmux commands to run)."
+    echo ""
     echo "Environment variables recognized by this script:"
     echo "TMPDIR     - Where tmux stores its session information"
     echo "             DEFAULT: If unset: /tmp"
@@ -180,6 +184,7 @@ function usage() {
     echo "             like mine do at 1, then you can set TMWIN to 1"
     echo "TMSESSHOST - Should the hostname appear in session names?"
     echo "             DEFAULT: true"
+    echo ""
     exit 42
 }
 
