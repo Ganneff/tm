@@ -35,7 +35,7 @@ commandline parsing. Later on it got a getopts style interface tacked
 onto, so now there is a traditional and a getopts style way of
 using it. Personally I like the traditional one more...
 
-- Traditional :: /home/joerg/bin/tm CMD [host]...
+- Traditional :: /home/joerg/bin/tm CMD [host|$anything]...
 - Getopts :: /home/joerg/bin/tm [-s host] [-m hostlist] [-l] [-n] [-h] [-c config] [-e]
 
 ** Traditional
@@ -79,14 +79,15 @@ commandline =$anything= (or =-c=).
 - First line :: Session name
 - Second line :: extra tmux commandline options
 - Any following line :: A hostname to open a shell with in the normal
-  ssh syntax. (ie [user@]hostname)
+  ssh syntax. (ie [user@]hostname). The [user@]hostname part can be
+  followed by any option ssh understands.
 
 *** .cfg TMDIR files
 - First line :: Session name
 - Second line :: extra tmux commandline options
 - Third line :: The new-session command to use. Place NONE here if you
-        want plain defaults, though that may mean just a shell. Otherwise
-        put the full new-session command with all options you want here.
+  want plain defaults, though that may mean just a shell. Otherwise
+  put the full new-session command with all options you want here.
 - Any following line :: Any tmux command you can find in the tmux
   manpage. You should ensure that commands arrive at the right tmux
   session / window. To help you with this, there are some variables
@@ -102,6 +103,25 @@ and executed as given. The output is read in line by line and added to
 the list of hostnames/commands already given.
 
 This feature works recursive, so be careful to not build a loop!
+*** Different SSH command / options
+The environment variable TMSSHCMD can be used to alter the default ssh
+command and its options used by tm globally. By default it is a plain
+"ssh". Inside an extensionless TMDIR file and on hosts added to the
+list using the LIST option described above, ssh options can be set by
+simply appending them, space seperated, after the hostname. So the
+hostlist
+#+BEGIN_QUOTE
+user@ws01
+ws02
+root@ws03 -v
+#+END_QUOTE
+will open 3 connections, one of which using ssh verbose output.
+
+As this may not be enough or one wants a different ssh command just
+for one TMDIR session, the session file recognizes SSHCMD as a token.
+The values given after will replace the value of TMSSHCMD for the
+session defined by the TMDIR file.
+Note: The last defined SSHCMD in the TMDIR file wins.
 
 ** Environment variables recognized by this script:
 - TMPDIR :: Where tmux stores its session information. DEFAULT: If unset: /tmp
@@ -117,6 +137,9 @@ This feature works recursive, so be careful to not build a loop!
   numbers start at anything different to 0, like mine do at 1, then
   you can set TMWIN to 1
 - TMSESSHOST :: Should the hostname appear in session names? DEFAULT: true
+- TMSSHCMD :: Allow to globally define a custom ssh command line.
+  This can be just the command or any option one wishes to have
+  everywhere. DEFAULT: ssh
 
 * Example usage
 You can find three example config files in the =examples/= subdir of
