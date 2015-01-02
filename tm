@@ -260,7 +260,7 @@ function own_config() {
 
     # Seperate the lines we work with
     local IFS=""
-    local workdata=(${TMDATA[@]:2})
+    local -a workdata=(${TMDATA[@]:2})
     IFS=${OLDIFS}
 
     # Lines (starting with line 3) may start with LIST, then we get
@@ -268,14 +268,14 @@ function own_config() {
     # command given, then append the output to TMDATA - while deleting
     # the actual line with LIST in.
 
-    TMPDATA=$(mktemp -u -p ${TMPDIR} .tmux_tm_XXXXXXXXXX)
+    local TMPDATA=$(mktemp -u -p ${TMPDIR} .tmux_tm_XXXXXXXXXX)
     trap "rm -f ${TMPDATA}" EXIT ERR HUP INT QUIT TERM
 
-    index=0
+    local index=0
     while [[ ${index} -lt ${#workdata[@]} ]]; do
         if [[ "${workdata[${index}]}" =~ ^LIST\ (.*)$ ]]; then
             # printf -- 'workdata: %s\n' "${workdata[@]}"
-            cmd=${BASH_REMATCH[1]}
+            local cmd=${BASH_REMATCH[1]}
             echo "Line ${index}: Fetching hostnames using provided shell command '${cmd}', please stand by..."
 
             $( ${cmd} >| "${TMPDATA}" )
@@ -288,14 +288,15 @@ function own_config() {
             # Restore IFS
             IFS=${OLDIFS}
 
-            unset workdata[${index}]
             workdata=( "${workdata[@]}" "${out[@]}" )
+            unset workdata[${index}]
             unset out
             # printf -- 'workdata: %s\n' "${workdata[@]}"
         fi
         index=$(( index + 1 ))
     done
     rm -f "${TMPDATA}"
+    trap - EXIT ERR HUP INT QUIT TERM
     TMDATA=( "${TMDATA[@]:0:2}" "${workdata[@]}"  )
 }
 
