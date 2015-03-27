@@ -36,7 +36,7 @@ onto, so now there is a traditional and a getopts style way of
 using it. Personally I like the traditional one more...
 
 - Traditional :: /home/joerg/bin/tm CMD [host|$anything]...
-- Getopts :: /home/joerg/bin/tm [-s host] [-m hostlist] [-l] [-n] [-h] [-c config] [-e]
+- Getopts :: /home/joerg/bin/tm [-s host] [-m hostlist] [-l] [-n] [-h] [-c config] [-e] [-r REPLACE]
 
 ** Traditional
 #+BEGIN_QUOTE
@@ -67,6 +67,7 @@ Options:
 + -n  ::          Open a second session to the same set of hosts
 + -c config  ::   Setup session according to TMDIR file
 + -e SESSION  ::  Use existion session named SESSION
++ -r REPLACE  ::  Value to use for replacing in session files
 
 
 ** TMDIR files
@@ -140,6 +141,14 @@ Note: The last defined SSHCMD in the TMDIR file wins.
 - TMSSHCMD :: Allow to globally define a custom ssh command line.
   This can be just the command or any option one wishes to have
   everywhere. DEFAULT: ssh
+
+** Replacing of variables in session files
+In session files you can use the token ++TMREPLACETM++ at any point.
+This will be replaced by the value of the -r option (if you use
+getopts style) or by the LAST argument on the line if you use
+traditional calling. Note that with traditional calling, the argument
+will also be tried as a hostname, so it may not make much sense there,
+unless using a session file that contains solely of LIST commands.
 
 * Example usage
 You can find three example config files in the =examples/= subdir of

@@ -62,7 +62,12 @@ declare -r TMDIR=${TMDIR:-"${HOME}/.tmux.d"}
 declare -r TMSESSHOST=${TMSESSHOST:-"true"}
 
 # Allow to globally define a custom ssh command line.
-declare TMSSHCMD=${TMSSHCMD:-"ssh"}
+TMSSHCMD=${TMSSHCMD:-"ssh"}
+
+# Save the last argument, it may be used (traditional style) for
+# replacing
+args=$#
+TMREPARG=${!args}
 
 # Where does your tmux starts numbering its windows? Mine does at 1,
 # default for tmux is 0. We try to find it out, but if we fail, (as we
@@ -74,7 +79,7 @@ if [[ -f ${HOME}/.tmux.conf ]]; then
 else
     bindex=0
 fi
-TMWIN=${TMWIN:-$bindex}
+declare -r TMWIN=${TMWIN:-$bindex}
 unset bindex
 
 ########################################################################
@@ -117,7 +122,7 @@ TMSESCFG=""
 function usage() {
     echo "tmux helper by Joerg Jaspert <joerg@ganneff.de>"
     echo "There are two ways to call it. Traditional and \"getopts\" style."
-    echo "Traditional call as: $0 CMD [host]..."
+    echo "Traditional call as: $0 CMD [host]...[host]"
     echo "Getopts call as: $0 [-s host] [-m hostlist] [-l] [-n] [-h] [-c config] [-e]"
     echo ""
     echo "Traditional:"
@@ -138,7 +143,7 @@ function usage() {
     echo "-n           Open a second session to the same set of hosts"
     echo "-c config    Setup session according to TMDIR file"
     echo "-e SESSION   Use existion session named SESSION"
-    echo ""
+    echo "-r REPLACE   Value to use for replacing in session files"
     echo ""
     echo "TMDIR file:"
     echo "Each file in \$TMDIR defines a tmux session. There are two types of files,"
@@ -167,6 +172,13 @@ function usage() {
     echo "NOTE: Both types of files accept external listings of hostnames."
     echo "      That is, the output of any shell command given will be used as a list"
     echo "      of hostnames to connect to (or a set of tmux commands to run)."
+    echo ""
+    echo "NOTE: Session files can include the Token ++TMREPLACETM++ at any point. This"
+    echo "      will be replaced by the value of the -r option (if you use getopts style) or"
+    echo "      by the LAST argument on the line if you use traditional calling."
+    echo "      Note that with traditional calling, the argument will also be tried as a hostname,"
+    echo "      so it may not make much sense there, unless using a session file that contains"
+    echo "      solely of LIST commands."
     echo ""
     echo "Environment variables recognized by this script:"
     echo "TMPDIR     - Where tmux stores its session information"
@@ -250,12 +262,13 @@ function own_config() {
         TMSESCFG="free"
         setup_command_aliases
     fi
+
     # Set IFS to be NEWLINE only, not also space/tab, as our input files
     # are \n seperated (one entry per line) and lines may well have spaces.
     local IFS="
 "
     # Fill an array with our config
-    TMDATA=( $(cat "${TMDIR}/$1") )
+    TMDATA=( $(cat "${TMDIR}/$1" | sed -e "s/++TMREPLACETM++/${TMREPARG}/g") )
     # Restore IFS
     IFS=${OLDIFS}
 
@@ -337,7 +350,7 @@ case ${cmdline} in
         shift
         ;;
     -*)
-        while getopts "lnhs:m:c:e:" OPTION; do
+        while getopts "lnhs:m:c:e:r:" OPTION; do
             case ${OPTION} in
                 l) # ls
                     list_sessions
@@ -361,6 +374,9 @@ case ${cmdline} in
                     ;;
                 n) # new session even if same name one already exists
                     DOUBLENAME=true
+                    ;;
+                r) # replacement arg
+                    TMREPARG=${OPTARG}
                     ;;
                 h)
                     usage
