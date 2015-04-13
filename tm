@@ -332,6 +332,14 @@ function list_sessions() {
     fi
 }
 
+# Remove some chars
+function clean_session() {
+    local OLDSESSION=$@
+    OLDSESSION=${OLDSESSION//\"}
+    OLDSESSION=${OLDSESSION//:}
+    SESSION=${OLDSESSION}
+}
+
 ########################################################################
 # MAIN work follows here
 # Check the first cmdline parameter, we might want to prepare something
@@ -419,6 +427,7 @@ if [[ ${DOUBLENAME} == true ]] && tmux has-session -t ${SESSION} 2>/dev/null; th
     fi
 fi
 
+SESSION=clean_session
 if [[ ${TMSESSHOST} = true ]]; then
     declare -r SESSION="$(uname -n|cut -d. -f1)_${SESSION}"
 else
