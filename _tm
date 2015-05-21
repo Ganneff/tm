@@ -93,7 +93,7 @@ function _tm() {
             _wanted hosts expl hostname _hosts && return
             ;;
         session)
-            echo "ohmy"
+            _tm_get_sessions
             ;;
     esac
 }
