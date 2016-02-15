@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Copyright (C) 2011, 2012, 2013, 2014 Joerg Jaspert <joerg@debian.org>
+# Copyright (C) 2011, 2012, 2013, 2014, 2016 Joerg Jaspert <joerg@debian.org>
 #
 # Redistribution and use in source and binary forms, with or without
 # modification, are permitted provided that the following conditions
@@ -306,7 +306,8 @@ function own_config() {
             # and what not, so \n is our seperator, not more.
             IFS="
 "
-            out=( $(cat "${TMPDATA}") )
+            out=( $(cat "${TMPDATA}" | tr -d '\r' ) )
+
             # Restore IFS
             IFS=${OLDIFS}
 
