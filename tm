@@ -180,6 +180,11 @@ function usage() {
     echo "      so it may not make much sense there, unless using a session file that contains"
     echo "      solely of LIST commands."
     echo ""
+    echo "NOTE: Session files can include any existing environment variable at any point (but"
+    echo "      only one per line). Those get replaced during tm execution time with the actual"
+    echo "      value of the environment variable. Common usage is $HOME, but any existing var"
+    echo "      works fine."
+    echo ""
     echo "Environment variables recognized by this script:"
     echo "TMPDIR     - Where tmux stores its session information"
     echo "             DEFAULT: If unset: /tmp"
@@ -289,19 +294,21 @@ function own_config() {
     # the list of hosts from elsewhere. So if one does, we exec the
     # command given, then append the output to TMDATA - while deleting
     # the actual line with LIST in.
-
     local TMPDATA=$(mktemp -u -p ${TMPDIR} .tmux_tm_XXXXXXXXXX)
     trap "rm -f ${TMPDATA}" EXIT ERR HUP INT QUIT TERM
-
     local index=0
     while [[ ${index} -lt ${#workdata[@]} ]]; do
         if [[ "${workdata[${index}]}" =~ ^LIST\ (.*)$ ]]; then
             # printf -- 'workdata: %s\n' "${workdata[@]}"
             local cmd=${BASH_REMATCH[1]}
+            if [[ ${cmd} =~ \$\{([0-9a-zA-Z_]+)\} ]]; then
+                repvar=${BASH_REMATCH[1]}
+                reptext=${!repvar}
+                cmd=${cmd//\$\{$repvar\}/$reptext}
+            fi
             echo "Line ${index}: Fetching hostnames using provided shell command '${cmd}', please stand by..."
 
             $( ${cmd} >| "${TMPDATA}" )
-
             # Set IFS to be NEWLINE only, not also space/tab, the list may have ssh options
             # and what not, so \n is our seperator, not more.
             IFS="
@@ -311,7 +318,7 @@ function own_config() {
             # Restore IFS
             IFS=${OLDIFS}
 
-            workdata=( "${workdata[@]}" "${out[@]}" )
+            workdata+=( "${out[@]}" )
             unset workdata[${index}]
             unset out
             # printf -- 'workdata: %s\n' "${workdata[@]}"
