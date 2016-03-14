@@ -123,7 +123,7 @@ function usage() {
     echo "tmux helper by Joerg Jaspert <joerg@ganneff.de>"
     echo "There are two ways to call it. Traditional and \"getopts\" style."
     echo "Traditional call as: $0 CMD [host]...[host]"
-    echo "Getopts call as: $0 [-s host] [-m hostlist] [-l] [-n] [-h] [-c config] [-e]"
+    echo "Getopts call as: $0 [-s host] [-m hostlist] [-k name] [-l] [-n] [-h] [-c config] [-e]"
     echo ""
     echo "Traditional:"
     echo "CMD is one of"
@@ -132,7 +132,9 @@ function usage() {
     echo " ms          Open multi ssh sessions to hosts, synchronizing input"
     echo "             To open a second session to the same set of hosts put a"
     echo "             -n in front of ms"
-    echo " \$anything  Either plain tmux session with name of \$anything or"
+    echo " k           Kill a session. Note that this needs the exact session name"
+    echo "             as shown by tm ls"
+    echo " \$anything   Either plain tmux session with name of \$anything or"
     echo "             session according to TMDIR file"
     echo ""
     echo "Getopts style:"
@@ -141,6 +143,8 @@ function usage() {
     echo "-m hostlist  Open multi ssh sessions to hosts, synchronizing input"
     echo "             Due to the way getopts works, hostlist must be enclosed in \"\""
     echo "-n           Open a second session to the same set of hosts"
+    echo "-k name      Kill a session. Note that this needs the exact session name"
+    echo "             as shown by tm ls"
     echo "-c config    Setup session according to TMDIR file"
     echo "-e SESSION   Use existion session named SESSION"
     echo "-r REPLACE   Value to use for replacing in session files"
@@ -350,8 +354,8 @@ case ${cmdline} in
         list_sessions
         exit 0
         ;;
-    s|ms)
-        # Yay, we want ssh to a remote host - or even a multi session setup
+    s|ms|k)
+        # Yay, we want ssh to a remote host - or even a multi session setup - or kill one
         # So we have to prepare our session name to fit in what tmux (and shell)
         # allow us to have. And so that we can reopen an existing session, if called
         # with the same hosts again.
@@ -360,7 +364,7 @@ case ${cmdline} in
         shift
         ;;
     -*)
-        while getopts "lnhs:m:c:e:r:" OPTION; do
+        while getopts "lnhs:m:c:e:r:k:" OPTION; do
             case ${OPTION} in
                 l) # ls
                     list_sessions
@@ -369,6 +373,11 @@ case ${cmdline} in
                 s) # ssh
                     SESSION=$(ssh_sessname s ${OPTARG})
                     declare -r cmdline=s
+                    shift
+                    ;;
+                k) # kill session
+                    SESSION=$(ssh_sessname s ${OPTARG})
+                    declare -r cmdline=k
                     shift
                     ;;
                 m) # ms (needs hostnames in "")
@@ -436,7 +445,7 @@ else
 fi
 
 # We only do special work if the SESSION does not already exist.
-if ! tmux has-session -t ${SESSION} 2>/dev/null; then
+if [[ ${cmdline} != k ]] && ! tmux has-session -t ${SESSION} 2>/dev/null; then
     # In case we want some extra things...
     # Check stupid users
     if [ $# -lt 1 ]; then
@@ -537,6 +546,11 @@ if ! tmux has-session -t ${SESSION} 2>/dev/null; then
     esac
     # Build up new session, ensure we start in the first window
     tmux select-window -t ${SESSION}:${TMWIN}
+elif [[ ${cmdline} == k ]]; then
+    # So we are asked to kill a session
+    tokill=${SESSION//k_/}
+    tmux kill-session -t ${tokill}
+    exit 0
 fi
 
 # And last, but not least, attach to it
