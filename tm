@@ -273,7 +273,6 @@ function own_config() {
         TMSESCFG="free"
         setup_command_aliases
     fi
-
     # Set IFS to be NEWLINE only, not also space/tab, as our input files
     # are \n seperated (one entry per line) and lines may well have spaces.
     local IFS="
@@ -451,6 +450,7 @@ if [[ ${cmdline} != k ]] && ! tmux has-session -t ${SESSION} 2>/dev/null; then
     if [ $# -lt 1 ]; then
         usage
     fi
+    tm_pane_error="create pane failed: pane too small"
     case ${cmdline} in
         s)
             # The user wants to open ssh to one or more hosts
@@ -486,12 +486,17 @@ if [[ ${cmdline} != k ]] && ! tmux has-session -t ${SESSION} 2>/dev/null; then
             tmux new-session -d -s ${SESSION} -n "Multisession" "${TMSSHCMD} ${1}"
             shift
             while [ $# -gt 0 ]; do
-                tmux split-window -d -t ${SESSION}:${TMWIN} "${TMSSHCMD} ${1}"
-                # Always have tmux redo the layout, so all windows are evenly sized.
-                # Otherwise you quickly end up with tmux telling you there is no
-                # more space available for tiling - and also very different amount
-                # of visible space per host.
-                tmux select-layout -t ${SESSION}:${TMWIN} main-horizontal >/dev/null
+                set +e
+                output=$(tmux split-window -d -t ${SESSION}:${TMWIN} "${TMSSHCMD} ${1}" 2>&1)
+                ret=$?
+                set -e
+                if [[ ${ret} -ne 0 ]] && [[ ${output} == ${tm_pane_error} ]]; then
+                    # No more space -> have tmux redo the
+                    # layout, so all windows are evenly sized.
+                    tmux select-layout -t ${SESSION}:${TMWIN} main-horizontal >/dev/null
+                    # And dont shift parameter away
+                    continue
+                fi
                 shift
             done
             # Now synchronize them
@@ -528,12 +533,16 @@ if [[ ${cmdline} != k ]] && ! tmux has-session -t ${SESSION} 2>/dev/null; then
                     index=3
                     while [ ${index} -lt ${tmcount} ]; do
                         # List of hostnames, open a new connection per line
-                        tmux split-window -d -t ${SESSION}:${TMWIN} "${TMSSHCMD} ${TMDATA[$index]}"
-                        # Always have tmux redo the layout, so all windows are evenly sized.
-                        # Otherwise you quickly end up with tmux telling you there is no
-                        # more space available for tiling - and also very different amount
-                        # of visible space per host.
-                        tmux select-layout -t ${SESSION}:${TMWIN} main-horizontal >/dev/null
+                        set +e
+                        output=$(tmux split-window -d -t ${SESSION}:${TMWIN} "${TMSSHCMD} ${TMDATA[$index]}" 2>&1)
+                        set -e
+                        if [[ ${output} == ${tm_pane_error} ]]; then
+                            # No more space -> have tmux redo the
+                            # layout, so all windows are evenly sized.
+                            tmux select-layout -t ${SESSION}:${TMWIN} main-horizontal >/dev/null
+                            # And again, don't increase index
+                            continue
+                        fi
                         (( index++ ))
                     done
                     # Now synchronize them
