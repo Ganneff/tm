@@ -79,7 +79,7 @@ if [[ -f ${HOME}/.tmux.conf ]]; then
 else
     bindex=0
 fi
-declare -r TMWIN=${TMWIN:-$bindex}
+declare TMWIN=${TMWIN:-$bindex}
 unset bindex
 
 ########################################################################
@@ -260,9 +260,15 @@ function setup_command_aliases() {
 # Run a command (function) after replacing variables
 function do_cmd() {
     local cmd=$@
+    cmd1=${cmd%% *}
+    if [[ ${cmd1} =~ ^# ]]; then
+        return
+    elif  [[ ${cmd1} =~ new-window ]]; then
+        TMWIN=$(( TMWIN + 1 ))
+    fi
+
     cmd=${cmd//SESSION/$SESSION}
     cmd=${cmd//TMWIN/$TMWIN}
-    cmd1=${cmd%% *}
     cmd=${cmd/$cmd1 /}
     eval tm_$cmd1 $cmd
 }
