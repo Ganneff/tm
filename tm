@@ -277,7 +277,6 @@ function do_cmd() {
 function own_config() {
     if [[ ${1} =~ .cfg$ ]]; then
         TMSESCFG="free"
-        setup_command_aliases
     fi
     # Set IFS to be NEWLINE only, not also space/tab, as our input files
     # are \n seperated (one entry per line) and lines may well have spaces.
@@ -350,6 +349,8 @@ function list_sessions() {
         echo "No tmux sessions available"
     fi
 }
+
+setup_command_aliases
 
 ########################################################################
 # MAIN work follows here
@@ -460,26 +461,26 @@ if [[ ${cmdline} != k ]] && ! tmux has-session -t ${SESSION} 2>/dev/null; then
     case ${cmdline} in
         s)
             # The user wants to open ssh to one or more hosts
-            tmux new-session -d -s ${SESSION} -n "${1}" "${TMSSHCMD} ${1}"
+            do_cmd new-session -d -s ${SESSION} -n "${1}" "${TMSSHCMD} ${1}"
             # We disable any automated renaming, as that lets tmux set
             # the pane title to the process running in the pane. Which
             # means you can end up with tons of "bash". With this
             # disabled you will have panes named after the host.
-            tmux set-window-option -t ${SESSION} automatic-rename off >/dev/null
+            do_cmd set-window-option -t ${SESSION} automatic-rename off >/dev/null
             # If we have at least tmux 1.7, allow-rename works, such also disabling
             # any rename based on shell escape codes.
             if [ ${TMUXMINOR//[!0-9]/} -ge 7 ] || [ ${TMUXMAJOR//[!0-9]/} -gt 1 ]; then
-                tmux set-window-option -t ${SESSION} allow-rename off >/dev/null
+                do_cmd set-window-option -t ${SESSION} allow-rename off >/dev/null
             fi
             shift
             count=2
             while [ $# -gt 0 ]; do
-                tmux new-window -d -t ${SESSION}:${count} -n "${1}" "${TMSSHCMD} ${1}"
-                tmux set-window-option -t ${SESSION}:${count} automatic-rename off >/dev/null
+                do_cmd new-window -d -t ${SESSION}:${count} -n "${1}" "${TMSSHCMD} ${1}"
+                do_cmd set-window-option -t ${SESSION}:${count} automatic-rename off >/dev/null
                 # If we have at least tmux 1.7, allow-rename works, such also disabling
                 # any rename based on shell escape codes.
                 if [ ${TMUXMINOR//[!0-9]/} -ge 7 ] || [ ${TMUXMAJOR//[!0-9]/} -gt 1 ]; then
-                    tmux set-window-option -t ${SESSION}:${count} allow-rename off >/dev/null
+                    do_cmd set-window-option -t ${SESSION}:${count} allow-rename off >/dev/null
                 fi
                 count=$(( count + 1 ))
                 shift
@@ -489,39 +490,39 @@ if [[ ${cmdline} != k ]] && ! tmux has-session -t ${SESSION} 2>/dev/null; then
             # We open a multisession window. That is, we tile the window as many times
             # as we have hosts, display them all and have the user input send to all
             # of them at once.
-            tmux new-session -d -s ${SESSION} -n "Multisession" "${TMSSHCMD} ${1}"
+            do_cmd new-session -d -s ${SESSION} -n "Multisession" "${TMSSHCMD} ${1}"
             shift
             while [ $# -gt 0 ]; do
                 set +e
-                output=$(tmux split-window -d -t ${SESSION}:${TMWIN} "${TMSSHCMD} ${1}" 2>&1)
+                output=$(do_cmd split-window -d -t ${SESSION}:${TMWIN} "${TMSSHCMD} ${1}" 2>&1)
                 ret=$?
                 set -e
                 if [[ ${ret} -ne 0 ]] && [[ ${output} == ${tm_pane_error} ]]; then
                     # No more space -> have tmux redo the
                     # layout, so all windows are evenly sized.
-                    tmux select-layout -t ${SESSION}:${TMWIN} main-horizontal >/dev/null
+                    do_cmd select-layout -t ${SESSION}:${TMWIN} main-horizontal >/dev/null
                     # And dont shift parameter away
                     continue
                 fi
                 shift
             done
             # Now synchronize them
-            tmux set-window-option -t ${SESSION}:${TMWIN} synchronize-pane >/dev/null
+            do_cmd set-window-option -t ${SESSION}:${TMWIN} synchronize-pane >/dev/null
             # And set a final layout which ensures they all have about the same size
-            tmux select-layout -t ${SESSION}:${TMWIN} tiled >/dev/null
+            do_cmd select-layout -t ${SESSION}:${TMWIN} tiled >/dev/null
             ;;
         *)
             # Whatever string, so either a plain session or something from our tmux.d
             if [ -z "${TMDATA}" ]; then
                 # the easy case, just a plain session name
-                tmux new-session -d -s ${SESSION}
+                do_cmd new-session -d -s ${SESSION}
             else
                 # data in our data array, the user wants his own config
                 if [[ ${TMSESCFG} = free ]]; then
                     if [[ ${TMDATA[2]} = NONE ]]; then
                         # We have a free form config where we get the actual tmux commands
                         # supplied by the user, so just issue them after creating the session.
-                        tmux new-session -d -s ${SESSION} -n "${TMDATA[0]}"
+                        do_cmd new-session -d -s ${SESSION} -n "${TMDATA[0]}"
                     else
                         do_cmd ${TMDATA[2]}
                     fi
@@ -533,38 +534,38 @@ if [[ ${cmdline} != k ]] && ! tmux has-session -t ${SESSION} 2>/dev/null; then
                     done
                 else
                     # So lets start with the "first" line, before dropping into a loop
-                    tmux new-session -d -s ${SESSION} -n "${TMDATA[0]}" "${TMSSHCMD} ${TMDATA[2]}"
+                    do_cmd new-session -d -s ${SESSION} -n "${TMDATA[0]}" "${TMSSHCMD} ${TMDATA[2]}"
 
                     tmcount=${#TMDATA[@]}
                     index=3
                     while [ ${index} -lt ${tmcount} ]; do
                         # List of hostnames, open a new connection per line
                         set +e
-                        output=$(tmux split-window -d -t ${SESSION}:${TMWIN} "${TMSSHCMD} ${TMDATA[$index]}" 2>&1)
+                        output=$(do_cmd split-window -d -t ${SESSION}:${TMWIN} "${TMSSHCMD} ${TMDATA[$index]}" 2>&1)
                         set -e
                         if [[ ${output} == ${tm_pane_error} ]]; then
                             # No more space -> have tmux redo the
                             # layout, so all windows are evenly sized.
-                            tmux select-layout -t ${SESSION}:${TMWIN} main-horizontal >/dev/null
+                            do_cmd select-layout -t ${SESSION}:${TMWIN} main-horizontal >/dev/null
                             # And again, don't increase index
                             continue
                         fi
                         (( index++ ))
                     done
                     # Now synchronize them
-                    tmux set-window-option -t ${SESSION}:${TMWIN} synchronize-pane >/dev/null
+                    do_cmd set-window-option -t ${SESSION}:${TMWIN} synchronize-pane >/dev/null
                     # And set a final layout which ensures they all have about the same size
-                    tmux select-layout -t ${SESSION}:${TMWIN} tiled >/dev/null
+                    do_cmd select-layout -t ${SESSION}:${TMWIN} tiled >/dev/null
                 fi
             fi
             ;;
     esac
     # Build up new session, ensure we start in the first window
-    tmux select-window -t ${SESSION}:${TMWIN}
+    do_cmd select-window -t ${SESSION}:${TMWIN}
 elif [[ ${cmdline} == k ]]; then
     # So we are asked to kill a session
     tokill=${SESSION//k_/}
-    tmux kill-session -t ${tokill}
+    do_cmd kill-session -t ${tokill}
     exit 0
 fi
 
