@@ -64,6 +64,9 @@ declare -r TMSESSHOST=${TMSESSHOST:-"true"}
 # Allow to globally define a custom ssh command line.
 TMSSHCMD=${TMSSHCMD:-"ssh"}
 
+# Debug output
+declare -r DEBUG=${DEBUG:-"false"}
+
 # Save the last argument, it may be used (traditional style) for
 # replacing
 args=$#
@@ -212,6 +215,7 @@ function usage() {
     echo "             This can be just the command or any option one wishes to have"
     echo "             everywhere."
     echo "             DEFAULT: ssh"
+    echo "DEBUG      - Show debug output (remember to redirect it to a file)"
     echo ""
     exit 42
 }
@@ -270,6 +274,7 @@ function do_cmd() {
     cmd=${cmd//SESSION/$SESSION}
     cmd=${cmd//TMWIN/$TMWIN}
     cmd=${cmd/$cmd1 /}
+    debug tm_$cmd1 $cmd
     eval tm_$cmd1 $cmd
 }
 
@@ -349,6 +354,14 @@ function list_sessions() {
         echo "No tmux sessions available"
     fi
 }
+
+# We either have a debug function that shows output, or one that
+# plainly returns
+if [[ ${DEBUG} == true ]]; then
+        eval "$(echo "debug() { echo \"\$@\" ; }")"
+else
+        eval "$(echo "debug() { :; }")"
+fi
 
 setup_command_aliases
 
