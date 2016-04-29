@@ -279,7 +279,7 @@ function do_cmd() {
     cmd=${cmd//SESSION/$SESSION}
     cmd=${cmd//TMWIN/$TMWIN}
     cmd=${cmd/$cmd1 /}
-    debug tm_$cmd1 $cmd
+    debug $cmd1 $cmd
     eval tm_$cmd1 $cmd
 }
 
@@ -479,7 +479,7 @@ if [[ ${cmdline} != k ]] && ! tmux has-session -t ${SESSION} 2>/dev/null; then
     case ${cmdline} in
         s)
             # The user wants to open ssh to one or more hosts
-            do_cmd new-session -d -s ${SESSION} -n "${1}" "${TMSSHCMD} ${1}"
+            do_cmd new-session -d -s ${SESSION} -n "${1}" "'${TMSSHCMD} ${1}'"
             # We disable any automated renaming, as that lets tmux set
             # the pane title to the process running in the pane. Which
             # means you can end up with tons of "bash". With this
@@ -508,11 +508,11 @@ if [[ ${cmdline} != k ]] && ! tmux has-session -t ${SESSION} 2>/dev/null; then
             # We open a multisession window. That is, we tile the window as many times
             # as we have hosts, display them all and have the user input send to all
             # of them at once.
-            do_cmd new-session -d -s ${SESSION} -n "Multisession" "${TMSSHCMD} ${1}"
+            do_cmd new-session -d -s ${SESSION} -n "Multisession" "'${TMSSHCMD} ${1}'"
             shift
             while [ $# -gt 0 ]; do
                 set +e
-                output=$(do_cmd split-window -d -t ${SESSION}:${TMWIN} "${TMSSHCMD} ${1}" 2>&1)
+                output=$(do_cmd split-window -d -t ${SESSION}:${TMWIN} "'${TMSSHCMD} ${1}'" 2>&1)
                 ret=$?
                 set -e
                 if [[ ${ret} -ne 0 ]] && [[ ${output} == ${tm_pane_error} ]]; then
@@ -540,7 +540,7 @@ if [[ ${cmdline} != k ]] && ! tmux has-session -t ${SESSION} 2>/dev/null; then
                     if [[ ${TMDATA[2]} = NONE ]]; then
                         # We have a free form config where we get the actual tmux commands
                         # supplied by the user, so just issue them after creating the session.
-                        do_cmd new-session -d -s ${SESSION} -n "${TMDATA[0]}"
+                        do_cmd new-session -d -s ${SESSION} -n "'${TMDATA[0]}'"
                     else
                         do_cmd ${TMDATA[2]}
                     fi
@@ -552,14 +552,14 @@ if [[ ${cmdline} != k ]] && ! tmux has-session -t ${SESSION} 2>/dev/null; then
                     done
                 else
                     # So lets start with the "first" line, before dropping into a loop
-                    do_cmd new-session -d -s ${SESSION} -n "${TMDATA[0]}" "${TMSSHCMD} ${TMDATA[2]}"
+                    do_cmd new-session -d -s ${SESSION} -n "${TMDATA[0]}" "'${TMSSHCMD} ${TMDATA[2]}'"
 
                     tmcount=${#TMDATA[@]}
                     index=3
                     while [ ${index} -lt ${tmcount} ]; do
                         # List of hostnames, open a new connection per line
                         set +e
-                        output=$(do_cmd split-window -d -t ${SESSION}:${TMWIN} "${TMSSHCMD} ${TMDATA[$index]}" 2>&1)
+                        output=$(do_cmd split-window -d -t ${SESSION}:${TMWIN} "'${TMSSHCMD} ${TMDATA[$index]}'" 2>&1)
                         set -e
                         if [[ ${output} == ${tm_pane_error} ]]; then
                             # No more space -> have tmux redo the
