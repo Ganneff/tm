@@ -253,12 +253,17 @@ function setup_command_aliases() {
     local command
     local SESNAME
     SESNAME="tmlscm$$"
-    # Debian Bug #718777 - tmux needs a session to have lscm work
-    tmux new-session -d -s ${SESNAME} -n "check" "sleep 3"
+    if [[ ${TMUXMAJOR} -lt 2 ]] || [[ ${TMUXMINOR} -lt 2 ]]; then
+        # Starting tmux 2.2, this is no longer needed
+        # Debian Bug #718777 - tmux needs a session to have lscm work
+        tmux new-session -d -s ${SESNAME} -n "check" "sleep 3"
+    fi
     for command in $(tmux list-commands|awk '{print $1}'); do
         eval "$(echo "tm_$command() { tmux $command \"\$@\" >/dev/null; }")"
     done
-    tmux kill-session -t ${SESNAME} || true
+    if [[ ${TMUXMAJOR} -lt 2 ]] || [[ ${TMUXMINOR} -lt 2 ]]; then
+        tmux kill-session -t ${SESNAME} || true
+    fi
 }
 
 # Run a command (function) after replacing variables
