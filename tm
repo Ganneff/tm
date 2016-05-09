@@ -294,7 +294,7 @@ function own_config() {
 "
     # Fill an array with our config
     if [[ -n ${TMDATA[@]:-""} ]] && [[ ${#TMDATA[@]} -gt 0 ]]; then
-        olddata+=("${TMDATA[@]}")
+        olddata=("${TMDATA[@]}")
     fi
 
     TMDATA=( $(cat "${TMDIR}/$1" | sed -e "s/++TMREPLACETM++/${TMREPARG}/g") )
