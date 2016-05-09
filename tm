@@ -293,11 +293,15 @@ function own_config() {
     local IFS="
 "
     # Fill an array with our config
+    if [[ -n ${TMDATA[@]:-""} ]] && [[ ${#TMDATA[@]} -gt 0 ]]; then
+        olddata+=("${TMDATA[@]}")
+    fi
+
     TMDATA=( $(cat "${TMDIR}/$1" | sed -e "s/++TMREPLACETM++/${TMREPARG}/g") )
     # Restore IFS
     IFS=${OLDIFS}
 
-    SESSION=$(clean_session ${TMDATA[0]})
+    SESSION=${SESSION:-$(clean_session ${TMDATA[0]})}
 
     if [ "${TMDATA[1]}" != "NONE" ]; then
         TMOPTS=${TMDATA[1]}
@@ -347,7 +351,14 @@ function own_config() {
     done
     rm -f "${TMPDATA}"
     trap - EXIT ERR HUP INT QUIT TERM
-    TMDATA=( "${TMDATA[@]:0:2}" "${workdata[@]}"  )
+    debug "TMDATA: ${TMDATA[@]}"
+    debug "olddata: ${olddata[@]:-''}"
+    if [[ -n ${olddata[@]:-""} ]]; then
+        TMDATA=( "${olddata[@]}" "${workdata[@]}" )
+    else
+        TMDATA=( "${TMDATA[@]:0:2}" "${workdata[@]}"  )
+    fi
+    debug "TMDATA now ${TMDATA[@]}"
 }
 
 # Simple overview of running sessions
@@ -442,7 +453,9 @@ case ${cmdline} in
                 usage
             fi
         elif [ -r "${TMDIR}/${cmdline}" ]; then
-            own_config $1
+            for arg in "$@"; do
+                own_config ${arg}
+            done
         else
             # Not a config file, so just session name.
             SESSION=${cmdline}
