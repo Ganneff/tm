@@ -463,9 +463,15 @@ case ${cmdline} in
         ;;
 esac
 
+havesession="false"
+if tmux has-session -t ${SESSION} 2>/dev/null; then
+    havesession="true"
+fi
+declare -r havesession
+
 # And now check if we would end up with a doubled session name.
 # If so add something "random" to the new name, like our pid.
-if [[ ${DOUBLENAME} == true ]] && tmux has-session -t ${SESSION} 2>/dev/null; then
+if [[ ${DOUBLENAME} == true ]] && [[ ${havesession} == true ]]; then
     # Session exist but we are asked to open another one,
     # so adjust our session name
     if [[ ${#TMDATA} -eq 0 ]] && [[ ${SESSION} =~ ([ms]+)_(.*) ]]; then
@@ -482,7 +488,7 @@ else
 fi
 
 # We only do special work if the SESSION does not already exist.
-if [[ ${cmdline} != k ]] && ! tmux has-session -t ${SESSION} 2>/dev/null; then
+if [[ ${cmdline} != k ]] && [[ ${havesession} == false ]]; then
     # In case we want some extra things...
     # Check stupid users
     if [ $# -lt 1 ]; then
