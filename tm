@@ -88,6 +88,10 @@ unset bindex
 ########################################################################
 # Nothing below here to configure
 
+# Should we group the session to another? Set to true if -g on
+# commandline
+GROUPSESSION=false
+
 # Should we open another session, even if we already have one with
 # this name? (Ie. second multisession to the same set of hosts)
 # This is either set by the getopts option -n or by having -n
@@ -127,6 +131,7 @@ function usage() {
     echo "There are two ways to call it. Traditional and \"getopts\" style."
     echo "Traditional call as: $0 CMD [host]...[host]"
     echo "Getopts call as: $0 [-s host] [-m hostlist] [-k name] [-l] [-n] [-h] [-c config] [-e]"
+    echo "Note that traditional and getopts can be mixed, sometimes."
     echo ""
     echo "Traditional:"
     echo "CMD is one of"
@@ -146,6 +151,8 @@ function usage() {
     echo "-m hostlist  Open multi ssh sessions to hosts, synchronizing input"
     echo "             Due to the way getopts works, hostlist must be enclosed in \"\""
     echo "-n           Open a second session to the same set of hosts"
+    echo "-g           Group session - attach to an existing session, but keep seperate"
+    echo "             window control"
     echo "-k name      Kill a session. Note that this needs the exact session name"
     echo "             as shown by tm ls"
     echo "-c config    Setup session according to TMDIR file"
@@ -399,7 +406,7 @@ case ${cmdline} in
         shift
         ;;
     -*)
-        while getopts "lnhs:m:c:e:r:k:" OPTION; do
+        while getopts "lnhs:m:c:e:r:k:g:" OPTION; do
             case ${OPTION} in
                 l) # ls
                     list_sessions
@@ -425,12 +432,18 @@ case ${cmdline} in
                     ;;
                 e) # existing session name
                     SESSION=$(clean_session ${OPTARG})
+                    shift
                     ;;
                 n) # new session even if same name one already exists
                     DOUBLENAME=true
                     ;;
                 r) # replacement arg
                     TMREPARG=${OPTARG}
+                    ;;
+                g) # Group session, not simple attach
+                    declare -r GROUPSESSION=true
+                    SESSION=$(clean_session ${OPTARG})
+                    shift
                     ;;
                 h)
                     usage
@@ -606,5 +619,14 @@ elif [[ ${cmdline} == k ]]; then
     exit 0
 fi
 
-# And last, but not least, attach to it
-tmux ${TMOPTS} attach -t ${SESSION}
+# If we should group our session or not
+if [[ ${GROUPSESSION} == true ]]; then
+    # Grouping means opening a new session, but sharing the sessions with
+    # another session (existing and new windows). But window control is separate.
+    sesname="$$_${SESSION}"
+    tmux ${TMOPTS} new-session -s ${sesname} -t ${SESSION}
+    tmux ${TMOPTS} kill-session -t ${sesname}
+else
+    # Do not group, just attach
+    tmux ${TMOPTS} attach -t ${SESSION}
+fi
