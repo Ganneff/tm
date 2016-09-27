@@ -246,7 +246,7 @@ function ssh_sessname() {
         local one=$1
         # get rid of first argument (s|ms), we don't want to sort this
         shift
-        local sess=$(for i in $*; do echo $i; done | sort | tr '\n' ' ')
+        local sess=$(for i in $@; do echo $i; done | sort | tr '\n' ' ')
         sess="${one} ${sess% *}"
     else
         # no sorting wanted
@@ -266,7 +266,7 @@ function setup_command_aliases() {
         tmux new-session -d -s ${SESNAME} -n "check" "sleep 3"
     fi
     for command in $(tmux list-commands|awk '{print $1}'); do
-        eval "$(echo "tm_$command() { tmux $command \"\$@\" >/dev/null; }")"
+        eval "tm_$command() { tmux $command \"\$@\" >/dev/null; }"
     done
     if [[ ${TMUXMAJOR} -lt 2 ]] || [[ ${TMUXMINOR} -lt 2 ]]; then
         tmux kill-session -t ${SESNAME} || true
@@ -275,7 +275,7 @@ function setup_command_aliases() {
 
 # Run a command (function) after replacing variables
 function do_cmd() {
-    local cmd=$@
+    local cmd=$*
     cmd1=${cmd%% *}
     if [[ ${cmd1} =~ ^# ]]; then
         return
@@ -304,7 +304,7 @@ function own_config() {
         olddata=("${TMDATA[@]}")
     fi
 
-    TMDATA=( $(cat "${TMDIR}/$1" | sed -e "s/++TMREPLACETM++/${TMREPARG}/g") )
+    TMDATA=( $(sed -e "s/++TMREPLACETM++/${TMREPARG}/g" "${TMDIR}/$1") )
     # Restore IFS
     IFS=${OLDIFS}
 
@@ -342,7 +342,7 @@ function own_config() {
             # and what not, so \n is our seperator, not more.
             IFS="
 "
-            out=( $(cat "${TMPDATA}" | tr -d '\r' ) )
+            out=( $(tr -d '\r' < "${TMPDATA}" ) )
 
             # Restore IFS
             IFS=${OLDIFS}
@@ -381,9 +381,9 @@ function list_sessions() {
 # We either have a debug function that shows output, or one that
 # plainly returns
 if [[ ${DEBUG} == true ]]; then
-        eval "$(echo "debug() { echo \"\$@\" ; }")"
+        eval "debug() { set -x ; echo \"\$*\" ; set +x ; return 0 ;}"
 else
-        eval "$(echo "debug() { :; }")"
+        eval "debug() { :; }"
 fi
 
 setup_command_aliases
