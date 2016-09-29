@@ -594,7 +594,7 @@ if [[ ${cmdline} != k ]] && [[ ${havesession} == false ]]; then
                         set +e
                         output=$(do_cmd split-window -d -t ${SESSION}:${TMWIN} "'${TMSSHCMD} ${TMDATA[$index]}'" 2>&1)
                         set -e
-                        if [[ ${output} == ${tm_pane_error} ]]; then
+                        if [[ ${output} =~ ${tm_pane_error} ]]; then
                             # No more space -> have tmux redo the
                             # layout, so all windows are evenly sized.
                             do_cmd select-layout -t ${SESSION}:${TMWIN} main-horizontal >/dev/null
