@@ -382,9 +382,9 @@ function list_sessions() {
 # We either have a debug function that shows output, or one that
 # plainly returns
 if [[ ${DEBUG} == true ]]; then
-        eval "debug() { set -x ; echo \"\$*\" ; set +x ; return 0 ;}"
+        eval "debug() { >&2 echo \$* ; }"
 else
-        eval "debug() { :; }"
+        eval "debug() { return ; }"
 fi
 
 setup_command_aliases
