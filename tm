@@ -365,6 +365,7 @@ function own_config() {
     else
         TMDATA=( "${TMDATA[@]:0:2}" "${workdata[@]}"  )
     fi
+    declare -r TMDATA=( "${TMDATA[@]}" )
     debug "TMDATA now ${TMDATA[@]}"
 }
 
