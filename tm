@@ -468,8 +468,6 @@ case ${cmdline} in
                     ;;
                 g) # Group session, not simple attach
                     declare -r GROUPSESSION=true
-                    SESSION=$(clean_session ${OPTARG})
-                    shift
                     ;;
                 h)
                     usage
