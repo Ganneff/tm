@@ -130,7 +130,7 @@ function usage() {
     echo "tmux helper by Joerg Jaspert <joerg@ganneff.de>"
     echo "There are two ways to call it. Traditional and \"getopts\" style."
     echo "Traditional call as: $0 CMD [host]...[host]"
-    echo "Getopts call as: $0 [-s host] [-m hostlist] [-k name] [-l] [-n] [-h] [-c config] [-e]"
+    echo "Getopts call as: $0 [-s host] [-m hostlist] [-k name] [-b session] [-j session] [-l] [-n] [-h] [-c config] [-e]"
     echo "Note that traditional and getopts can be mixed, sometimes."
     echo ""
     echo "Traditional:"
@@ -142,6 +142,8 @@ function usage() {
     echo "             -n in front of ms"
     echo " k           Kill a session. Note that this needs the exact session name"
     echo "             as shown by tm ls"
+    echo " b           Break all panes of given session into single windows in that session"
+    echo " j           Join all windows of given session into single window in that session"
     echo " \$anything   Either plain tmux session with name of \$anything or"
     echo "             session according to TMDIR file"
     echo ""
@@ -155,6 +157,8 @@ function usage() {
     echo "             window control"
     echo "-k name      Kill a session. Note that this needs the exact session name"
     echo "             as shown by tm ls"
+    echo "-b X         Break all panes of given session into single windows in that session"
+    echo "-j X         Join all windows of given session into single window in that session"
     echo "-c config    Setup session according to TMDIR file"
     echo "-e SESSION   Use existion session named SESSION"
     echo "-r REPLACE   Value to use for replacing in session files"
@@ -267,6 +271,7 @@ function setup_command_aliases() {
     fi
     for command in $(tmux list-commands|awk '{print $1}'); do
         eval "tm_$command() { tmux $command \"\$@\" >/dev/null; }"
+        eval "tm_out_$command() { tmux $command \"\$@\" ; }"
     done
     if [[ ${TMUXMAJOR} -lt 2 ]] || [[ ${TMUXMINOR} -lt 2 ]]; then
         tmux kill-session -t ${SESNAME} || true
@@ -406,8 +411,18 @@ case ${cmdline} in
         declare -r cmdline
         shift
         ;;
+    b)
+        declare -r cmdline=b
+        shift
+        declare -r SESSION=$@
+        ;;
+    j)
+        declare -r cmdline=j
+        shift
+        declare -r SESSION=$@
+        ;;
     -*)
-        while getopts "lnhs:m:c:e:r:k:g:" OPTION; do
+        while getopts "lnhgs:m:c:e:r:k:b:j:" OPTION; do
             case ${OPTION} in
                 l) # ls
                     list_sessions
@@ -426,6 +441,16 @@ case ${cmdline} in
                 m) # ms (needs hostnames in "")
                     SESSION=$(ssh_sessname ms ${OPTARG})
                     declare -r cmdline=ms
+                    shift
+                    ;;
+                b) # b (break panes in session X, window Y)
+                    declare -r SESSION=${OPTARG}
+                    declare -r cmdline=b
+                    shift
+                    ;;
+                j) # j (join windows in session X to first window)
+                    declare -r SESSION=${OPTARG}
+                    declare -r cmdline=j
                     shift
                     ;;
                 c) # pre-defined config
@@ -467,9 +492,7 @@ case ${cmdline} in
                 usage
             fi
         elif [ -r "${TMDIR}/${cmdline}" ]; then
-            for arg in "$@"; do
-                own_config ${arg}
-            done
+            own_config ${1}
         else
             # Not a config file, so just session name.
             SESSION=${cmdline}
@@ -617,6 +640,23 @@ elif [[ ${cmdline} == k ]]; then
     # So we are asked to kill a session
     tokill=${SESSION//k_/}
     do_cmd kill-session -t ${tokill}
+    exit 0
+elif [[ ${cmdline} == b ]]; then
+    # Split all panes of the given session and its window into multiple windows
+    for pane in $(do_cmd out_list-panes -s -t${SESSION} -F'#{pane_id}'); do
+        do_cmd break-pane -s"${pane}" 2>/dev/null || true
+    done
+    exit 0
+elif [[ ${cmdline} == j ]]; then
+    # Join all windows in a session into the first window
+    for window in $(do_cmd out_list-windows -t${SESSION} -F'#{window_id}'|tail -n +2); do
+        do_cmd join-pane -s${window} -t${SESSION}:${TMWIN}
+        # Optimize by checking for pane too small
+        do_cmd select-layout -t ${SESSION}:${TMWIN} tiled >/dev/null
+        #2>/dev/null || true
+    done
+    # Now synchronize them
+    do_cmd set-window-option -t ${SESSION}:${TMWIN} synchronize-pane >/dev/null
     exit 0
 fi
 
