@@ -35,3 +35,12 @@ Need to adapt docs from the old [README.org](old/README.org) to here.
   - [X] Allows LIST command, recursively
   - [X] Support ++TMREPLACETM++
 - [ ] Extended config files (.cfg ending)
+
+# How to build
+You need [Rust](https://www.rust-lang.org/) on your machine,
+installation of that is described at [Rust Install](https://www.rust-lang.org/tools/install).
+
+Afterwards [Cargo](https://doc.rust-lang.org/cargo/), the Rust Package
+manager, will help you along, `cargo build --release` should suffice
+to install all needed Rust packages and build a binary. Output file
+will be _target/release/tm_.
