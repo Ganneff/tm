@@ -1,4 +1,4 @@
-# tm
+# tm - tmux manager / helper
 
 This is the second version of my tmux helper _tm_, used to ease my
 day-to-day work with [tmux](https://github.com/tmux/tmux/wiki).
