@@ -264,7 +264,7 @@ function setup_command_aliases() {
     local command
     local SESNAME
     SESNAME="tmlscm$$"
-    if [[ ${TMUXMAJOR} -lt 2 ]] || [[ ${TMUXMINOR} -lt 2 ]]; then
+    if [[ ${TMUXMAJOR:0:1} -lt 2 ]] || [[ ${TMUXMINOR:0:1} -lt 2 ]]; then
         # Starting tmux 2.2, this is no longer needed
         # Debian Bug #718777 - tmux needs a session to have lscm work
         tmux new-session -d -s ${SESNAME} -n "check" "sleep 3"
@@ -273,7 +273,7 @@ function setup_command_aliases() {
         eval "tm_$command() { tmux $command \"\$@\" >/dev/null; }"
         eval "tm_out_$command() { tmux $command \"\$@\" ; }"
     done
-    if [[ ${TMUXMAJOR} -lt 2 ]] || [[ ${TMUXMINOR} -lt 2 ]]; then
+    if [[ ${TMUXMAJOR:0:1} -lt 2 ]] || [[ ${TMUXMINOR:0:1} -lt 2 ]]; then
         tmux kill-session -t ${SESNAME} || true
     fi
 }
