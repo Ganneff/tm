@@ -440,7 +440,7 @@ fn ls() {
 }
 
 /// Check if a session exists
-fn has_session(session: &String) -> bool {
+fn has_session(session: &str) -> bool {
     TmuxCommand::new()
         .has_session()
         .target_session(session)
@@ -452,7 +452,7 @@ fn has_session(session: &String) -> bool {
 }
 
 /// Attach to a running (or just prepared) tmux session
-fn attach(session: &String) -> Result<bool, tmux_interface::Error> {
+fn attach(session: &str) -> Result<bool, tmux_interface::Error> {
     trace!("Entering attach");
     let ret = if has_session(session) {
         TmuxCommand::new()
@@ -469,7 +469,7 @@ fn attach(session: &String) -> Result<bool, tmux_interface::Error> {
 
 /// SSH to multiple hosts, synchronized input (all panes receive the
 /// same keystrokes)
-fn syncssh(hosts: Vec<String>, sesname: &String) -> Result<&String, tmux_interface::Error> {
+fn syncssh(hosts: Vec<String>, sesname: &str) -> Result<&str, tmux_interface::Error> {
     trace!("Entering syncssh");
     debug!("Hosts to connect to: {:?}", hosts);
     debug!("Creating session {}", sesname);
@@ -560,7 +560,7 @@ fn syncssh(hosts: Vec<String>, sesname: &String) -> Result<&String, tmux_interfa
 }
 
 /// SSH to a remote host (or multiple)
-fn ssh(hosts: Vec<String>, sesname: &String) -> Result<&String, tmux_interface::Error> {
+fn ssh(hosts: Vec<String>, sesname: &str) -> Result<&str, tmux_interface::Error> {
     trace!("Entering ssh");
     debug!("Creating session {}", sesname);
     debug!("Hosts to connect to: {:?}", hosts);
@@ -607,7 +607,7 @@ fn ssh(hosts: Vec<String>, sesname: &String) -> Result<&String, tmux_interface::
 }
 
 /// Kill a session
-fn kill_session(sesname: &String) {
+fn kill_session(sesname: &str) {
     trace!("Entering kill_session");
     if has_session(sesname) {
         debug!("Asked to kill session {}", sesname);
@@ -631,7 +631,7 @@ fn kill_session(sesname: &String) {
 
 /// Tiny helper to replace the magic ++TMREPLACETM++
 #[doc(hidden)]
-fn tmreplace(input: &String, replace: &Option<String>) -> Result<String> {
+fn tmreplace(input: &str, replace: &Option<String>) -> Result<String> {
     match replace {
         Some(v) => Ok(input.replace("++TMREPLACETM++", v)),
         None => Ok(input.to_string()),
@@ -658,7 +658,7 @@ fn parse_line(line: &str, replace: &Option<String>, current_dir: &Path) -> Resul
                 debug!("Parsing command line: {:?}", rest);
                 // Do a shell-conform split of the command and arguments,
                 // ie take care of " and things.
-                Shlex::new(&rest)
+                Shlex::new(rest)
             };
 
             // The command ought to be the second word on the line,
@@ -666,7 +666,7 @@ fn parse_line(line: &str, replace: &Option<String>, current_dir: &Path) -> Resul
             // in a line.
             let cmd = cmdparser
                 .next()
-                .ok_or(anyhow!("Empty LIST found - no command given"))?;
+                .ok_or_else(|| anyhow!("Empty LIST found - no command given"))?;
             // Next we want the arguments. Need to ensure they stay
             // correctly quoted, so use the quote function on them.
             let args: Vec<String> = cmdparser.collect();
@@ -759,10 +759,9 @@ fn parse_line(line: &str, replace: &Option<String>, current_dir: &Path) -> Resul
 fn simple_config(sesfile: &Path, replace: &Option<String>) -> Result<()> {
     trace!("Entered simple_config, for session file: {:?}", sesfile);
     // Needed for parse_line, to set directory for processes it may spawn
-    let sesfilepath = sesfile.parent().ok_or(anyhow!(
-        "Could not determine directory for {}",
-        sesfile.display()
-    ))?;
+    let sesfilepath = sesfile
+        .parent()
+        .ok_or_else(|| anyhow!("Could not determine directory for {}", sesfile.display()))?;
     // Want to read the session config file
     let sesreader = BufReader::new(File::open(sesfile)?);
     // Need session name later, default to Unknown, just in case
@@ -805,7 +804,7 @@ fn simple_config(sesfile: &Path, replace: &Option<String>) -> Result<()> {
                 debug!("Hostname/LIST line");
                 // Third and following lines are either hostnames or
                 // LIST commands, so parse them.
-                hosts.append(&mut parse_line(&line, replace, &sesfilepath)?);
+                hosts.append(&mut parse_line(&line, replace, sesfilepath)?);
             }
         }
     }
