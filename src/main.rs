@@ -29,6 +29,7 @@ use directories::UserDirs;
 use flexi_logger::{AdaptiveFormat, Logger};
 use log::{debug, error, info, trace};
 use rand::Rng;
+use shlex::Shlex;
 use std::{
     env,
     ffi::OsString,
@@ -646,21 +647,32 @@ fn tmreplace(input: &String, replace: &Option<String>) -> Result<String> {
 fn parse_line(line: &str, replace: &Option<String>, current_dir: &Path) -> Result<Vec<String>> {
     trace!("Entered parse_line");
     // We are interested in the first word to decide what we see
-    let mut splitit = line.split_ascii_whitespace();
-    match splitit.next() {
+    let first = line.split_whitespace().next();
+    match first {
         // LIST, we are asked to execute something and read its stdout
         Some("LIST") => {
             debug!("LIST command found");
+            // The rest of the line (command and arguments)
+            let mut cmdparser = {
+                let rest = line.trim_start_matches("LIST");
+                debug!("Parsing command line: {:?}", rest);
+                // Do a shell-conform split of the command and arguments,
+                // ie take care of " and things.
+                Shlex::new(&rest)
+            };
+
             // The command ought to be the second word on the line,
             // but obviously people may mistype and have a single LIST
             // in a line.
-            let cmd = splitit
+            let cmd = cmdparser
                 .next()
                 .ok_or(anyhow!("Empty LIST found - no command given"))?;
-            // And all the rest, whatever there may be, is arguments for command.
-            let args = splitit.collect::<Vec<&str>>();
+            // Next we want the arguments. Need to ensure they stay
+            // correctly quoted, so use the quote function on them.
+            let args: Vec<String> = cmdparser.collect();
             debug!("cmd is {}", cmd);
             debug!("args are {:?}", args);
+
             // Our process spawner, pleased to hand us results as a nice
             // string seperated by newline (well, if output contains newlines)
             let cmdout = String::from_utf8(
