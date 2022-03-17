@@ -240,6 +240,25 @@ impl Cli {
     }
 }
 
+#[derive(Debug, Default)]
+/// Store session related information
+struct Session {
+    /// The session name
+    sesname: String,
+}
+
+impl Session {
+    /// Takes a string, applies some cleanup, then stores it as
+    /// session name, returning the cleaned up value
+    fn set_name(&mut self, newname: &str) -> Result<&String> {
+        trace!("Session.set_name(), input: {}", newname);
+        // Replace a set of characters we do not want in the session name with _
+        self.sesname = newname.replace(&[' ', ':', '"', '.'][..], "_");
+        trace!("Session name now: {}", self.sesname);
+        Ok(&self.sesname)
+    }
+}
+
 /// Help setting up static variables based on user environment.
 ///
 /// We allow the user to configure certain properties/behaviours of tm
@@ -756,7 +775,7 @@ fn parse_line(line: &str, replace: &Option<String>, current_dir: &Path) -> Resul
 /// ganneff@host3
 /// LIST cat foo.list
 /// ```
-fn simple_config(sesfile: &Path, replace: &Option<String>) -> Result<()> {
+fn simple_config(sesfile: &Path, replace: &Option<String>, session: &mut Session) -> Result<()> {
     trace!("Entered simple_config, for session file: {:?}", sesfile);
     // Needed for parse_line, to set directory for processes it may spawn
     let sesfilepath = sesfile
@@ -779,7 +798,7 @@ fn simple_config(sesfile: &Path, replace: &Option<String>) -> Result<()> {
         match index {
             0 => {
                 // First line is session name
-                debug!("Session name: {}", &line);
+                debug!("Possible session name: {}", &line);
                 // Before we got to simple_config(), we already tried
                 // looking for a session with the name the user gave
                 // us as argument. And it did not exist.
@@ -796,7 +815,8 @@ fn simple_config(sesfile: &Path, replace: &Option<String>) -> Result<()> {
                         sesfile
                     ));
                 } else {
-                    sesname = line.clone();
+                    sesname = session.set_name(&line)?.to_string();
+                    debug!("Calculated session name: {}", sesname);
                 }
             }
             1 => trace!("Ignoring 2nd line"),
@@ -840,6 +860,10 @@ fn main() -> Result<()> {
     debug!("TMSSHCMD: {}", *TMSSHCMD);
     debug!("TMWIN: {}", *TMWIN);
 
+    let mut session = Session {
+        ..Default::default()
+    };
+
     // First we check what the tm shell called "getopt-style"
     if cli.ls {
         ls();
@@ -855,7 +879,7 @@ fn main() -> Result<()> {
                 sesname,
                 sespath
             );
-            attach_session!(sesname, simple_config(&sespath, &cli.replace));
+            attach_session!(sesname, simple_config(&sespath, &cli.replace, &mut session));
         } else {
             trace!("Should attach session {}", sesname);
             attach_session!(sesname);
