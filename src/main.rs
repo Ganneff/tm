@@ -178,8 +178,8 @@ impl Cli {
     ///
     /// It also "cleans" the session name, that is, it replaces
     /// spaces, :, " and . with _ (underscores).
-    fn session_name(&self) -> Result<String> {
-        trace!("In session_name");
+    fn session_name_from_hosts(&self) -> Result<String> {
+        trace!("In session_name_from_hosts");
         let mut hosts = self.get_hosts()?;
         trace!(
             "Need to build session name from: {:?}, TMSESSHOST: {}",
@@ -202,9 +202,36 @@ impl Cli {
             hosts.insert(1, insert.to_string());
         }
         // Replace a set of characters we do not want in the session name with _
-        let name = { hosts }.join("_").replace(&[' ', ':', '"', '.'][..], "_");
+        let name = hosts.join("_");
         debug!("Generated session name: {}", name);
         Ok(name)
+    }
+
+    /// Find (and set) a session name. Appears we have many
+    /// possibilities to get at one, depending how we are called.
+    fn find_session_name(&self, session: &mut Session) -> Result<String> {
+        trace!("find_session_name");
+        let possiblename: String = {
+            if self.kill.is_some() {
+                self.kill.clone().unwrap()
+            } else if self.session.is_some() {
+                self.session.clone().unwrap()
+            } else if self.sshhosts != None || self.multihosts != None {
+                self.session_name_from_hosts()?
+            } else if self.command != None {
+                match &self.command.as_ref().unwrap() {
+                    Commands::S { hosts: _ } | Commands::Ms { hosts: _ } => {
+                        self.session_name_from_hosts()?
+                    }
+                    Commands::K { sesname } => sesname.to_string(),
+                    &_ => "Unknown".to_string(),
+                }
+            } else {
+                "Unhandled command so unknown session name".to_string()
+            }
+        };
+        let sesname = session.set_name(&possiblename)?;
+        Ok(sesname.to_string())
     }
 
     /// Returns a string depending on subcommand called, to adjust
@@ -257,6 +284,27 @@ impl Session {
         trace!("Session name now: {}", self.sesname);
         Ok(&self.sesname)
     }
+}
+
+#[test]
+fn test_set_name() {
+    let mut session = Session {
+        ..Default::default()
+    };
+
+    assert_eq!("test", session.set_name("test").unwrap());
+    assert_eq!("test_second", session.set_name("test second").unwrap());
+    assert_eq!("test_third", session.set_name("test:third").unwrap());
+    assert_eq!(
+        "test_fourth_fifth",
+        session.set_name("test fourth fifth").unwrap()
+    );
+    assert_eq!(
+        "test_fourth_fifth_more_words_here_set_in",
+        session
+            .set_name("test fourth_fifth:more words here\"set in")
+            .unwrap()
+    );
 }
 
 /// Help setting up static variables based on user environment.
@@ -511,7 +559,7 @@ fn syncssh(hosts: Vec<String>, sesname: &str) -> Result<&str, tmux_interface::Er
         for x in others {
             let mut count = 1;
             loop {
-                debug!("New pane, session going to {}", x);
+                debug!("New pane for {sesname}, destination {x}");
                 let output = TmuxCommand::new()
                     .split_window()
                     .detached()
@@ -810,7 +858,7 @@ fn simple_config(sesfile: &Path, replace: &Option<String>, session: &mut Session
                 // be surprising.
                 if has_session(&line) {
                     return Err(anyhow!(
-                        "Session name {} from file {:?} matches existing session, not recreating/messing with it.",
+                        "Session name {} as read from file {:?} matches existing session, not recreating/messing with it.",
                         line,
                         sesfile
                     ));
@@ -864,33 +912,34 @@ fn main() -> Result<()> {
         ..Default::default()
     };
 
+    let sesname = cli.find_session_name(&mut session)?;
     // First we check what the tm shell called "getopt-style"
     if cli.ls {
         ls();
     } else if cli.kill.is_some() {
-        let sesname = cli.kill.as_ref().unwrap();
-        kill_session(sesname);
+        kill_session(&sesname);
     } else if cli.session.is_some() {
-        let sesname = cli.session.as_ref().unwrap();
-        let sespath = Path::join(Path::new(&*TMDIR), Path::new(sesname));
+        let sespath = Path::join(Path::new(&*TMDIR), Path::new(&sesname));
         if Path::new(&sespath).exists() {
             trace!(
                 "Should attach session {} or configure session from {:?}",
                 sesname,
                 sespath
             );
-            attach_session!(sesname, simple_config(&sespath, &cli.replace, &mut session));
+            attach_session!(
+                &sesname,
+                simple_config(&sespath, &cli.replace, &mut session)
+            );
         } else {
             trace!("Should attach session {}", sesname);
-            attach_session!(sesname);
+            attach_session!(&sesname);
         };
     } else if cli.sshhosts != None {
         trace!("ssh called");
-        let sesname = &cli.session_name()?;
-        if has_session(sesname) {
-            attach_session!(sesname);
+        if has_session(&sesname) {
+            attach_session!(&sesname);
         } else {
-            match ssh(cli.get_hosts()?, sesname) {
+            match ssh(cli.get_hosts()?, &sesname) {
                 Ok(val) => {
                     trace!("Session opened ({:#?}), now attaching", val);
                     attach_session!(val);
@@ -900,11 +949,10 @@ fn main() -> Result<()> {
         }
     } else if cli.multihosts != None {
         trace!("ms called");
-        let sesname = &cli.session_name()?;
-        if has_session(sesname) {
-            attach_session!(sesname);
+        if has_session(&sesname) {
+            attach_session!(&sesname);
         } else {
-            match syncssh(cli.get_hosts()?, sesname) {
+            match syncssh(cli.get_hosts()?, &sesname) {
                 Ok(val) => {
                     trace!("Session opened ({:#?}), now attaching", val);
                     attach_session!(val);
@@ -926,12 +974,11 @@ fn main() -> Result<()> {
         match &cli.command.as_ref().unwrap() {
             Commands::Ls {} => ls(),
             Commands::S { hosts: _ } => {
-                trace!("ssh called");
-                let sesname = &cli.session_name()?;
-                if has_session(sesname) {
-                    attach_session!(sesname);
+                trace!("ssh subcommand called");
+                if has_session(&sesname) {
+                    attach_session!(&sesname);
                 } else {
-                    match ssh(cli.get_hosts()?, sesname) {
+                    match ssh(cli.get_hosts()?, &sesname) {
                         Ok(val) => {
                             trace!("Session opened ({:#?}), now attaching", val);
                             attach_session!(val);
@@ -941,12 +988,11 @@ fn main() -> Result<()> {
                 }
             }
             Commands::Ms { hosts: _ } => {
-                trace!("ms called");
-                let sesname = &cli.session_name()?;
-                if has_session(sesname) {
-                    attach_session!(sesname);
+                trace!("ms subcommand called");
+                if has_session(&sesname) {
+                    attach_session!(&sesname);
                 } else {
-                    match syncssh(cli.get_hosts()?, sesname) {
+                    match syncssh(cli.get_hosts()?, &sesname) {
                         Ok(val) => {
                             trace!("Session opened ({:#?}), now attaching", val);
                             attach_session!(val);
