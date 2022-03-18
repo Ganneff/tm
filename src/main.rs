@@ -285,6 +285,29 @@ impl Session {
         trace!("Session name now: {}", self.sesname);
         Ok(&self.sesname)
     }
+
+    /// Kill a session
+    fn kill(&self) {
+        trace!("Session.kill()");
+        if has_session(&self.sesname) {
+            debug!("Asked to kill session {}", self.sesname);
+            if TmuxCommand::new()
+                .kill_session()
+                .target_session(&self.sesname)
+                .output()
+                .unwrap()
+                .0
+                .status
+                .success()
+            {
+                info!("Session {} is no more", self.sesname);
+            } else {
+                info!("Session {} could not be killed!", self.sesname);
+            }
+        } else {
+            debug!("No such session {}", self.sesname);
+        }
+    }
 }
 
 #[test]
@@ -674,29 +697,6 @@ fn ssh(hosts: Vec<String>, sesname: &str) -> Result<&str, tmux_interface::Error>
     Ok(sesname)
 }
 
-/// Kill a session
-fn kill_session(sesname: &str) {
-    trace!("Entering kill_session");
-    if has_session(sesname) {
-        debug!("Asked to kill session {}", sesname);
-        if TmuxCommand::new()
-            .kill_session()
-            .target_session(sesname)
-            .output()
-            .unwrap()
-            .0
-            .status
-            .success()
-        {
-            info!("Session {} is no more", &sesname);
-        } else {
-            info!("Session {} could not be killed!", &sesname);
-        }
-    } else {
-        debug!("No such session {}", &sesname);
-    }
-}
-
 /// Tiny helper to replace the magic ++TMREPLACETM++
 #[doc(hidden)]
 fn tmreplace(input: &str, replace: &Option<String>) -> Result<String> {
@@ -934,7 +934,7 @@ fn main() -> Result<()> {
     if cli.ls {
         ls();
     } else if cli.kill.is_some() {
-        kill_session(&sesname);
+        session.kill();
     } else if cli.session.is_some() {
         let sespath = Path::join(Path::new(&*TMDIR), Path::new(&sesname));
         if Path::new(&sespath).exists() {
@@ -1019,7 +1019,8 @@ fn main() -> Result<()> {
                 }
             }
             Commands::K { sesname } => {
-                kill_session(sesname);
+                trace!("k subcommand called, killing {sesname}");
+                session.kill();
             }
         }
     }
