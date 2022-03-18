@@ -14,7 +14,7 @@ env:
 
 jobs:
   test:
-    name: Test Rust ${{ matrix.rust }} on ${{ matrix.os }}
+    name: Run ${{ matrix.jobs.name }} with Rust ${{ matrix.rust }} on ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
