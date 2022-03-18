@@ -289,7 +289,7 @@ impl Session {
     /// Kill a session
     fn kill(&self) {
         trace!("Session.kill()");
-        if has_session(&self.sesname) {
+        if self.exists() {
             debug!("Asked to kill session {}", self.sesname);
             if TmuxCommand::new()
                 .kill_session()
@@ -307,6 +307,34 @@ impl Session {
         } else {
             debug!("No such session {}", self.sesname);
         }
+    }
+
+    /// Check if a session exists
+    fn exists(&self) -> bool {
+        TmuxCommand::new()
+            .has_session()
+            .target_session(&self.sesname)
+            .output()
+            .unwrap()
+            .0
+            .status
+            .success()
+    }
+
+    /// Attach to a running (or just prepared) tmux session
+    fn attach(&self) -> Result<bool, tmux_interface::Error> {
+        trace!("Entering attach()");
+        let ret = if self.exists() {
+            TmuxCommand::new()
+                .attach_session()
+                .target_session(&self.sesname)
+                .output()?;
+            true
+        } else {
+            false
+        };
+        trace!("Leaving attach with result {}", ret);
+        Ok(ret)
     }
 }
 
@@ -402,20 +430,20 @@ macro_rules! setwinopt {
 
 /// Attach to an existing session
 macro_rules! attach_session {
-    ($sesname:expr) => {
-        match attach($sesname) {
-            Ok(true) => debug!("Successfully attached to {}", $sesname),
-            Ok(false) => debug!("Session {} not found, could not attach", $sesname),
+    ($session:expr) => {
+        match $session.attach() {
+            Ok(true) => debug!("Successfully attached to {}", $session.sesname),
+            Ok(false) => debug!("Session {} not found, could not attach", $session.sesname),
             Err(val) => error!("Error: {}", val),
         }
     };
-    ($sesname:expr, $func:expr) => {
-        match attach($sesname) {
-            Ok(true) => debug!("Successfully attached to {}", $sesname),
+    ($session:expr, $func:expr) => {
+        match $session.attach() {
+            Ok(true) => debug!("Successfully attached to {}", $session.sesname),
             Ok(false) => {
                 debug!(
                     "Session {} not found, going to set it up from scratch",
-                    $sesname
+                    $session.sesname
                 );
                 match $func {
                     Ok(_) => debug!("Successfully setup new session"),
@@ -528,34 +556,6 @@ fn ls() {
         .to_string();
     println!("{}", sessions);
     trace!("Leaving ls");
-}
-
-/// Check if a session exists
-fn has_session(session: &str) -> bool {
-    TmuxCommand::new()
-        .has_session()
-        .target_session(session)
-        .output()
-        .unwrap()
-        .0
-        .status
-        .success()
-}
-
-/// Attach to a running (or just prepared) tmux session
-fn attach(session: &str) -> Result<bool, tmux_interface::Error> {
-    trace!("Entering attach");
-    let ret = if has_session(session) {
-        TmuxCommand::new()
-            .attach_session()
-            .target_session(session)
-            .output()?;
-        true
-    } else {
-        false
-    };
-    trace!("Leaving attach with result {}", ret);
-    Ok(ret)
 }
 
 /// SSH to multiple hosts, synchronized input (all panes receive the
@@ -873,7 +873,7 @@ fn simple_config(sesfile: &Path, replace: &Option<String>, session: &mut Session
                 // session name like this already exists, we error
                 // out. Could, *maybe* attach to that? Unsure. Might
                 // be surprising.
-                if has_session(&line) {
+                if session.exists() {
                     return Err(anyhow!(
                         "Session name {} as read from file {:?} matches existing session, not recreating/messing with it.",
                         line,
@@ -898,7 +898,7 @@ fn simple_config(sesfile: &Path, replace: &Option<String>, session: &mut Session
     match syncssh(hosts, &sesname) {
         Ok(val) => {
             trace!("Session opened ({:#?}), now attaching", val);
-            attach_session!(val);
+            attach_session!(session);
             Ok(())
         }
         Err(val) => return Err(anyhow!("Could not finish session setup: {}", val)),
@@ -943,36 +943,33 @@ fn main() -> Result<()> {
                 sesname,
                 sespath
             );
-            attach_session!(
-                &sesname,
-                simple_config(&sespath, &cli.replace, &mut session)
-            );
+            attach_session!(session, simple_config(&sespath, &cli.replace, &mut session));
         } else {
             trace!("Should attach session {}", sesname);
-            attach_session!(&sesname);
+            attach_session!(&session);
         };
     } else if cli.sshhosts != None {
         trace!("ssh called");
-        if has_session(&sesname) {
-            attach_session!(&sesname);
+        if session.exists() {
+            attach_session!(&session);
         } else {
             match ssh(cli.get_hosts()?, &sesname) {
                 Ok(val) => {
                     trace!("Session opened ({:#?}), now attaching", val);
-                    attach_session!(val);
+                    attach_session!(session);
                 }
                 Err(val) => error!("Could not finish session setup: {}", val),
             }
         }
     } else if cli.multihosts != None {
         trace!("ms called");
-        if has_session(&sesname) {
-            attach_session!(&sesname);
+        if session.exists() {
+            attach_session!(&session);
         } else {
             match syncssh(cli.get_hosts()?, &sesname) {
                 Ok(val) => {
                     trace!("Session opened ({:#?}), now attaching", val);
-                    attach_session!(val);
+                    attach_session!(session);
                 }
                 Err(val) => error!("Could not finish session setup: {}", val),
             }
@@ -992,13 +989,13 @@ fn main() -> Result<()> {
             Commands::Ls {} => ls(),
             Commands::S { hosts: _ } => {
                 trace!("ssh subcommand called");
-                if has_session(&sesname) {
-                    attach_session!(&sesname);
+                if session.exists() {
+                    attach_session!(&session);
                 } else {
                     match ssh(cli.get_hosts()?, &sesname) {
                         Ok(val) => {
                             trace!("Session opened ({:#?}), now attaching", val);
-                            attach_session!(val);
+                            attach_session!(session);
                         }
                         Err(val) => error!("Could not finish session setup: {}", val),
                     }
@@ -1006,13 +1003,13 @@ fn main() -> Result<()> {
             }
             Commands::Ms { hosts: _ } => {
                 trace!("ms subcommand called");
-                if has_session(&sesname) {
-                    attach_session!(&sesname);
+                if session.exists() {
+                    attach_session!(&session);
                 } else {
                     match syncssh(cli.get_hosts()?, &sesname) {
                         Ok(val) => {
                             trace!("Session opened ({:#?}), now attaching", val);
-                            attach_session!(val);
+                            attach_session!(session);
                         }
                         Err(val) => error!("Could not finish session setup: {}", val),
                     }
