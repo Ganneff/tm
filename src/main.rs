@@ -27,6 +27,7 @@ use anyhow::{anyhow, Result};
 use clap::{Parser, Subcommand};
 use directories::UserDirs;
 use flexi_logger::{AdaptiveFormat, Logger};
+use home_dir::HomeDirExt;
 use log::{debug, error, info, trace};
 use rand::Rng;
 use shlex::Shlex;
@@ -731,12 +732,28 @@ fn parse_line(line: &str, replace: &Option<String>, current_dir: &Path) -> Resul
             // The command ought to be the second word on the line,
             // but obviously people may mistype and have a single LIST
             // in a line.
-            let cmd = cmdparser
+            // Also, ~ and $HOME/${HOME} expansion are supported.
+            let cmd: String = cmdparser
                 .next()
-                .ok_or_else(|| anyhow!("Empty LIST found - no command given"))?;
-            // Next we want the arguments. Need to ensure they stay
-            // correctly quoted, so use the quote function on them.
-            let args: Vec<String> = cmdparser.collect();
+                .ok_or_else(|| anyhow!("Empty LIST found - no command given"))?
+                .replace("$HOME", "~/")
+                .replace("${HOME}", "~/")
+                .expand_home()?
+                .into_os_string()
+                .into_string()
+                .expect("String convert failed");
+            // Next we want the arguments.
+            // Also, ~ and $HOME/${HOME} expansion are supported.
+            let args: Vec<String> = cmdparser
+                .map(|l| l.replace("$HOME", "~/").replace("${HOME}", "~/"))
+                .map(|l| {
+                    l.expand_home()
+                        .expect("Could not successfully expand ~ for arguments of LIST call")
+                        .into_os_string()
+                        .into_string()
+                        .expect("String convert failed")
+                })
+                .collect();
             debug!("cmd is {}", cmd);
             debug!("args are {:?}", args);
 
