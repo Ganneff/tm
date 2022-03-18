@@ -19,36 +19,36 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        os: [ubuntu-latest]
+        rust: [stable]
+        jobs:
+          - name: Clippy
+            task: cargo clippy --workspace --all-targets --verbose
+          - name: tests
+            task: cargo test --workspace --verbose
+          - name: fmt
+            task: cargo fmt --all -- --check
         include:
-          - { rust: stable,           os: ubuntu-latest }
-          - { rust: stable,           os: macos-latest }
-          - { rust: nightly,          os: ubuntu-latest }
+          - name: Clippy
+            env:
+              RUSTFLAGS: -Dwarnings
     steps:
       - uses: actions/checkout@v2
-      - uses: hecrj/setup-rust-action@v1
+      - name: Prepare Rust
+        uses: hecrj/setup-rust-action@v1
         with:
           rust-version: ${{ matrix.rust }}
-      - run: cargo test --verbose --workspace
-  
-  clippy:
-    name: Lint with clippy
-    runs-on: ubuntu-latest
-    env:
-      RUSTFLAGS: -Dwarnings
-    steps:
-      - uses: actions/checkout@v2
-      - uses: hecrj/setup-rust-action@v1
+          components: clippy, rustfmt
+      - name: Cache cargo registry
+        uses: actions/cache@v2
+        continue-on-error: false
         with:
-          components: clippy
-      - run: cargo clippy --workspace --all-targets --verbose
-
-  rustfmt:
-    name: Verify code formatting
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v2
-      - uses: hecrj/setup-rust-action@v1
-        with:
-          components: rustfmt
-      - run: cargo fmt --all -- --check
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-    
+      - name: Run task ${{ matrix.jobs.name }}
+        run: ${{ matrix.jobs.task }}
   
