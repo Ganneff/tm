@@ -767,12 +767,12 @@ fn parse_line(line: &str, replace: &Option<String>, current_dir: &Path) -> Resul
                     .stdout,
             )?;
             debug!("Command returned: {:?}", cmdout);
-            if cmdout.len() > 0 {
+            if !cmdout.is_empty() {
                 let mut plhosts: Vec<String> = Vec::new();
                 for plline in cmdout.lines() {
                     trace!("Read line: '{}'", plline);
                     // Replace magic token, if exists and asked for
-                    let plline = tmreplace(&plline.to_string(), replace)?;
+                    let plline = tmreplace(plline, replace)?;
                     debug!("Processing line: '{}'", plline);
                     // And process the line, may contain another command
                     // OR just a hostname
