@@ -760,24 +760,30 @@ fn parse_line(line: &str, replace: &Option<String>, current_dir: &Path) -> Resul
             // Our process spawner, pleased to hand us results as a nice
             // string seperated by newline (well, if output contains newlines)
             let cmdout = String::from_utf8(
-                Command::new(cmd)
+                Command::new(&cmd)
                     .current_dir(&current_dir)
-                    .args(args)
+                    .args(&args)
                     .output()?
                     .stdout,
             )?;
             debug!("Command returned: {:?}", cmdout);
-            let mut plhosts: Vec<String> = Vec::new();
-            for plline in cmdout.lines() {
-                trace!("Read line: '{}'", plline);
-                // Replace magic token, if exists and asked for
-                let plline = tmreplace(&plline.to_string(), replace)?;
-                debug!("Processing line: '{}'", plline);
-                // And process the line, may contain another command
-                // OR just a hostname
-                plhosts.append(&mut parse_line(&plline, replace, current_dir)?);
+            if cmdout.len() > 0 {
+                let mut plhosts: Vec<String> = Vec::new();
+                for plline in cmdout.lines() {
+                    trace!("Read line: '{}'", plline);
+                    // Replace magic token, if exists and asked for
+                    let plline = tmreplace(&plline.to_string(), replace)?;
+                    debug!("Processing line: '{}'", plline);
+                    // And process the line, may contain another command
+                    // OR just a hostname
+                    plhosts.append(&mut parse_line(&plline, replace, current_dir)?);
+                }
+                Ok(plhosts)
+            } else {
+                Err(anyhow!(
+                    "LIST command {cmd} {args:?} produced no output, can not build session"
+                ))
             }
-            Ok(plhosts)
         }
         Some(&_) => {
             trace!("SSH destination, returning");
