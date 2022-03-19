@@ -12,6 +12,10 @@ status for how much is implemented). Still, there might be breakage,
 some known ones are mentioned at the end of this document. Feel free
 to open an issue, if you notice more.
 
+## Silly badges
+[![codecov](https://codecov.io/gh/Ganneff/tm/branch/main/graph/badge.svg?token=KeiO6hIIJQ)](https://codecov.io/gh/Ganneff/tm)
+![BSD licensed](https://img.shields.io/badge/license-BSD-blue.svg)
+
 ## Usage
 tm still tries to support both commandline styles that the shell
 script did, that is it can both do the "subcommand" style
