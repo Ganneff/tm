@@ -132,6 +132,7 @@ struct Cli {
 // Lets try to test the cmdline interface, so we are halfway sure, we
 // stay as compatible to the old tm as possible
 #[test]
+#[allow(clippy::bool_assert_comparison)]
 fn test_cmdline_getopts_simpleopt() {
     let mut session = Session {
         ..Default::default()
@@ -175,6 +176,7 @@ fn test_cmdline_getopts_simpleopt() {
 }
 
 #[test]
+#[allow(clippy::bool_assert_comparison)]
 fn test_cmdline_getopts_s() {
     let mut session = Session {
         ..Default::default()
@@ -213,6 +215,7 @@ fn test_cmdline_getopts_s() {
 }
 
 #[test]
+#[allow(clippy::bool_assert_comparison)]
 fn test_cmdline_getopts_ms() {
     let mut session = Session {
         ..Default::default()
@@ -290,6 +293,7 @@ enum Commands {
 }
 
 #[test]
+#[allow(clippy::bool_assert_comparison)]
 fn test_cmdline_ls() {
     let mut cli = Cli::parse_from("tm ls".split_whitespace());
     assert_eq!(cli.ls, false);
@@ -304,6 +308,7 @@ fn test_cmdline_ls() {
 }
 
 #[test]
+#[allow(clippy::bool_assert_comparison)]
 fn test_cmdline_s() {
     let mut session = Session {
         ..Default::default()
