@@ -147,13 +147,24 @@ fn test_cmdline_getopts_simpleopt() {
     let mut session = Session {
         ..Default::default()
     };
+    // No option
+    let mut cli = Cli::parse_from("tm".split_whitespace());
+    assert_eq!(
+        cli.find_session_name(&mut session).unwrap(),
+        "Unhandled_command_so_unknown_session_name".to_string()
+    );
+
     // -l is ls
-    let mut cli = Cli::parse_from("tm -l".split_whitespace());
+    cli = Cli::parse_from("tm -l".split_whitespace());
     assert_eq!(cli.ls, true);
 
     // -k to kill a session
-    cli = Cli::parse_from("tm -k session".split_whitespace());
-    assert_eq!(cli.kill, Some("session".to_string()));
+    cli = Cli::parse_from("tm -k killsession".split_whitespace());
+    assert_eq!(cli.kill, Some("killsession".to_string()));
+    assert_eq!(
+        cli.find_session_name(&mut session).unwrap(),
+        "killsession".to_string()
+    );
 
     // -k to kill a session - second value on commandline should not
     // adjust session name.
@@ -249,7 +260,7 @@ fn test_cmdline_getopts_ms() {
     );
 
     // Combine with -n
-    cli = Cli::parse_from("tm -n -m testhost morehost".split_whitespace());
+    cli = Cli::parse_from("tm -n ms testhost morehost".split_whitespace());
     let sesname = cli.find_session_name(&mut session).unwrap();
     // -n puts a random number into the name, so check with regex
     let re = Regex::new(r"^ms_\d+_morehost_testhost$").unwrap();
