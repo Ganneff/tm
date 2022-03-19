@@ -1185,8 +1185,13 @@ fn main() -> Result<()> {
             );
             attach_session!(session, simple_config(&sespath, &cli.replace, &mut session));
         } else {
-            trace!("Should attach session {}", sesname);
-            attach_session!(&session);
+            trace!("Should attach or create session {}", sesname);
+            attach_session!(session, {
+                TmuxCommand::new()
+                    .new_session()
+                    .session_name(&session.sesname)
+                    .output()
+            });
         };
     } else if cli.sshhosts != None {
         trace!("ssh called");
