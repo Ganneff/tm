@@ -154,6 +154,13 @@ fn test_cmdline_getopts_simpleopt() {
         "Unhandled_command_so_unknown_session_name".to_string()
     );
 
+    // Just a session
+    cli = Cli::parse_from("tm foo".split_whitespace());
+    assert_eq!(
+        cli.find_session_name(&mut session).unwrap(),
+        "foo".to_string()
+    );
+
     // -l is ls
     cli = Cli::parse_from("tm -l".split_whitespace());
     assert_eq!(cli.ls, true);
@@ -357,6 +364,31 @@ fn test_cmdline_s() {
     assert_eq!(
         cli.find_session_name(&mut session).unwrap(),
         "s_andonemore_morehost_testhost".to_string()
+    );
+}
+
+#[test]
+#[allow(clippy::bool_assert_comparison)]
+fn test_cmdline_k() {
+    let mut session = Session {
+        ..Default::default()
+    };
+    // k is kill that session
+    let cli = Cli::parse_from("tm k session".split_whitespace());
+    assert_eq!(
+        cli.find_session_name(&mut session).unwrap(),
+        "session".to_string()
+    );
+    let cc = cli.command.as_ref().unwrap();
+    assert_eq!(
+        cc,
+        &Commands::K {
+            sesname: "session".to_string()
+        }
+    );
+    assert_eq!(
+        cli.find_session_name(&mut session).unwrap(),
+        "session".to_string()
     );
 }
 
@@ -898,6 +930,19 @@ fn tmreplace(input: &str, replace: &Option<String>) -> Result<String> {
     }
 }
 
+#[test]
+fn test_tmreplace() {
+    assert_eq!(tmreplace("test", &None).unwrap(), "test".to_string());
+    assert_eq!(
+        tmreplace("test", &Some("foo".to_string())).unwrap(),
+        "test".to_string()
+    );
+    assert_eq!(
+        tmreplace("test++TMREPLACETM++", &Some("foo".to_string())).unwrap(),
+        "testfoo".to_string()
+    );
+}
+
 /// Parse a line of a [simple_config] file.
 ///
 /// If a LIST command is found, execute that, and parse its output -
@@ -989,7 +1034,7 @@ fn parse_line(line: &str, replace: &Option<String>, current_dir: &Path) -> Resul
 }
 
 #[test]
-fn test_cmdline_parse_line() {
+fn test_parse_line() {
     let mut line = "justonehost";
     let mut replace = None;
     let mut current_dir = Path::new("/");
