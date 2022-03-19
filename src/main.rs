@@ -964,6 +964,48 @@ fn parse_line(line: &str, replace: &Option<String>, current_dir: &Path) -> Resul
     }
 }
 
+#[test]
+fn test_cmdline_parse_line() {
+    let mut line = "justonehost";
+    let mut replace = None;
+    let mut current_dir = Path::new("/");
+    let mut res = parse_line(&line, &replace, &current_dir).unwrap();
+    assert_eq!(res, vec!["justonehost".to_string()]);
+    line = "LIST /bin/echo \"onehost\ntwohost\nthreehost\"";
+    replace = None;
+    current_dir = Path::new("/");
+    res = parse_line(&line, &replace, &current_dir).unwrap();
+    assert_eq!(
+        res,
+        vec![
+            "onehost".to_string(),
+            "twohost".to_string(),
+            "threehost".to_string()
+        ]
+    );
+    line = "LIST /bin/echo \"onehost\ntwohost\nthreehost\nfoobar\nLIST /bin/echo \"LIST /bin/echo \"bar\nbaz\n\"\n\"\"";
+    replace = None;
+    current_dir = Path::new("/");
+    res = parse_line(&line, &replace, &current_dir).unwrap();
+    assert_eq!(
+        res,
+        vec![
+            "onehost".to_string(),
+            "twohost".to_string(),
+            "threehost".to_string(),
+            "foobar".to_string(),
+            "bar".to_string(),
+            "baz".to_string()
+        ]
+    );
+    line = " ";
+    replace = None;
+    current_dir = Path::new("/");
+    res = parse_line(&line, &replace, &current_dir).unwrap();
+    let empty: Vec<String> = vec![];
+    assert_eq!(res, empty);
+}
+
 /// Create a new session from a "simple" config file.
 ///
 /// This will create a new tmux session according to the _simple_
