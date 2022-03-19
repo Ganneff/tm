@@ -68,7 +68,12 @@ struct Cli {
     ///
     /// When multiple destinations are specified, they are all opened
     /// into seperate tmux windows (not sessions!).
-    #[clap(short = 's', display_order = 15, multiple_values = true)]
+    #[clap(
+        short = 's',
+        display_order = 15,
+        multiple_values = true,
+        min_values = 1
+    )]
     sshhosts: Option<Vec<String>>,
 
     /// Open multi SSH sessions to hosts, synchronizing input.
@@ -79,7 +84,12 @@ struct Cli {
     /// into one single tmux window and many panes in there.
     /// Additionally, the "synchronize-input" option is turned on, so
     /// that anything entered will be send to every host.
-    #[clap(short = 'm', display_order = 20, multiple_values = true)]
+    #[clap(
+        short = 'm',
+        display_order = 20,
+        multiple_values = true,
+        min_values = 1
+    )]
     multihosts: Option<Vec<String>>,
 
     /// Open as second session to the same set of hosts as an existing
@@ -268,6 +278,7 @@ enum Commands {
         /// Target destinations for `ssh(1)`, which may be specified as
         /// either \[user@]hostname or a URI of the form
         /// ssh://\[user@]hostname\[:port].
+        #[clap(multiple_values = true, required = true)]
         hosts: Vec<String>,
     },
 
@@ -281,6 +292,7 @@ enum Commands {
     Ms {
         /// List of target destinations for `ssh(1)`, the same details
         /// for the arguments as for [Cli::sshhosts] applies.
+        #[clap(multiple_values = true, required = true)]
         hosts: Vec<String>,
     },
 
@@ -288,6 +300,7 @@ enum Commands {
     #[clap(display_order = 25)]
     K {
         /// Session name as shown by ls to kill, same as [Session](Cli::kill)
+        #[clap(required = true)]
         sesname: String,
     },
 }
