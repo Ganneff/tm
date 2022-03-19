@@ -25,3 +25,6 @@ shlex = "1.1.0"
 home-dir = "^0.1"
 
 [workspace]
+
+[dev-dependencies]
+regex = "1.5.5"

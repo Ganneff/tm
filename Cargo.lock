@@ -507,6 +507,7 @@ dependencies = [
  "log",
  "quit",
  "rand",
+ "regex",
  "shlex",
  "thiserror",
  "tmux_interface",

@@ -42,6 +42,9 @@ use std::{
 };
 use tmux_interface::TmuxCommand;
 
+#[cfg(test)]
+use regex::Regex;
+
 #[derive(Debug, Parser)]
 #[clap(author, version, about)]
 #[clap(propagate_version = true)]
@@ -96,7 +99,7 @@ struct Cli {
     /// this option, a second client would always show the same
     /// content as the first.
     #[clap(short = 'g', display_order = 30)]
-    group: Option<bool>,
+    group: bool,
 
     /// Kill a session, Session name as shown by ls
     #[clap(short = 'k', display_order = 35)]
@@ -124,6 +127,124 @@ struct Cli {
     /// file and will open a session as specified in there.
     #[clap(display_order = 55)]
     session: Option<String>,
+}
+
+// Lets try to test the cmdline interface, so we are halfway sure, we
+// stay as compatible to the old tm as possible
+#[test]
+fn test_cmdline_getopts_simpleopt() {
+    let mut session = Session {
+        ..Default::default()
+    };
+    // -l is ls
+    let mut cli = Cli::parse_from("tm -l".split_whitespace());
+    assert_eq!(cli.ls, true);
+
+    // -k to kill a session
+    cli = Cli::parse_from("tm -k session".split_whitespace());
+    assert_eq!(cli.kill, Some("session".to_string()));
+
+    // -k to kill a session - second value on commandline should not
+    // adjust session name.
+    cli = Cli::parse_from("tm -k session ses2".split_whitespace());
+    assert_eq!(cli.session, Some("ses2".to_string()));
+    assert_eq!(
+        cli.find_session_name(&mut session).unwrap(),
+        "session".to_string()
+    );
+
+    // -v/-q goes via clap_verbosity, just check that we did not suddenly redefine it
+    assert_eq!(cli.verbose.log_level_filter(), log::LevelFilter::Error);
+    assert_eq!(cli.verbose.is_silent(), false);
+    cli = Cli::parse_from("tm -v".split_whitespace());
+    assert_eq!(cli.verbose.log_level_filter(), log::LevelFilter::Warn);
+    assert_eq!(cli.verbose.is_silent(), false);
+    cli = Cli::parse_from("tm -vvvv".split_whitespace());
+    assert_eq!(cli.verbose.log_level_filter(), log::LevelFilter::Trace);
+    cli = Cli::parse_from("tm -q".split_whitespace());
+    assert_eq!(cli.verbose.log_level_filter(), log::LevelFilter::Off);
+    assert_eq!(cli.verbose.is_silent(), true);
+
+    // -n wants a second session to same hosts as existing one
+    let mut cli = Cli::parse_from("tm -n".split_whitespace());
+    assert_eq!(cli.second, true);
+
+    // -g attaches existing session, but different window config
+    cli = Cli::parse_from("tm -g".split_whitespace());
+    assert_eq!(cli.group, true);
+}
+
+#[test]
+fn test_cmdline_getopts_s() {
+    let mut session = Session {
+        ..Default::default()
+    };
+    // -s is ssh to one or more hosts
+    let mut cli = Cli::parse_from("tm -s testhost".split_whitespace());
+    assert_eq!(cli.sshhosts, Some(vec!["testhost".to_string()]));
+    assert_eq!(
+        cli.find_session_name(&mut session).unwrap(),
+        "s_testhost".to_string()
+    );
+    cli = Cli::parse_from("tm -s testhost morehost andonemore".split_whitespace());
+    assert_eq!(
+        cli.sshhosts,
+        Some(vec![
+            "testhost".to_string(),
+            "morehost".to_string(),
+            "andonemore".to_string()
+        ])
+    );
+    assert_eq!(
+        cli.find_session_name(&mut session).unwrap(),
+        "s_andonemore_morehost_testhost".to_string()
+    );
+
+    // Combine with -n
+    cli = Cli::parse_from("tm -n -s testhost".split_whitespace());
+    let sesname = cli.find_session_name(&mut session).unwrap();
+    // -n puts a random number into the name, so check with regex
+    let re = Regex::new(r"^s_\d+_testhost$").unwrap();
+    assert_eq!(re.is_match(&sesname), true);
+    assert_ne!(
+        cli.find_session_name(&mut session).unwrap(),
+        "s_testhost".to_string()
+    );
+}
+
+#[test]
+fn test_cmdline_getopts_ms() {
+    let mut session = Session {
+        ..Default::default()
+    };
+
+    // -m is ssh to one or more hosts, synchronized input
+    let mut cli = Cli::parse_from("tm -m testhost".split_whitespace());
+    assert_eq!(cli.multihosts, Some(vec!["testhost".to_string()]));
+    cli = Cli::parse_from("tm -m testhost morehost andonemore".split_whitespace());
+    assert_eq!(
+        cli.multihosts,
+        Some(vec![
+            "testhost".to_string(),
+            "morehost".to_string(),
+            "andonemore".to_string()
+        ])
+    );
+    assert_eq!(
+        cli.find_session_name(&mut session).unwrap(),
+        "ms_andonemore_morehost_testhost".to_string()
+    );
+
+    // Combine with -n
+    cli = Cli::parse_from("tm -n -m testhost morehost".split_whitespace());
+    let sesname = cli.find_session_name(&mut session).unwrap();
+    // -n puts a random number into the name, so check with regex
+    let re = Regex::new(r"^ms_\d+_morehost_testhost$").unwrap();
+    assert_eq!(re.is_match(&sesname), true);
+    assert_ne!(
+        cli.find_session_name(&mut session).unwrap(),
+        "ms_morehost_testhosts".to_string()
+    );
 }
 
 #[derive(Subcommand, Debug, PartialEq)]
@@ -166,6 +287,48 @@ enum Commands {
         /// Session name as shown by ls to kill, same as [Session](Cli::kill)
         sesname: String,
     },
+}
+
+#[test]
+fn test_cmdline_ls() {
+    let mut cli = Cli::parse_from("tm ls".split_whitespace());
+    assert_eq!(cli.ls, false);
+    assert_eq!(cli.command, Some(Commands::Ls {}));
+
+    // -v/-q goes via clap_verbosity, just check that we did not suddenly redefine it
+    assert_eq!(cli.verbose.log_level_filter(), log::LevelFilter::Error);
+    assert_eq!(cli.verbose.is_silent(), false);
+    cli = Cli::parse_from("tm -v".split_whitespace());
+    assert_eq!(cli.verbose.log_level_filter(), log::LevelFilter::Warn);
+    assert_eq!(cli.verbose.is_silent(), false);
+}
+
+#[test]
+fn test_cmdline_s() {
+    let mut session = Session {
+        ..Default::default()
+    };
+    // s is ssh to one or more hosts
+    let mut cli = Cli::parse_from("tm s testhost".split_whitespace());
+    let mut cc = cli.command.as_ref().unwrap();
+    let mut val = vec!["testhost".to_string()];
+    assert_eq!(cc, &Commands::S { hosts: val });
+    assert_eq!(
+        cli.find_session_name(&mut session).unwrap(),
+        "s_testhost".to_string()
+    );
+    cli = Cli::parse_from("tm s testhost morehost andonemore".split_whitespace());
+    cc = cli.command.as_ref().unwrap();
+    val = vec![
+        "testhost".to_string(),
+        "morehost".to_string(),
+        "andonemore".to_string(),
+    ];
+    assert_eq!(cc, &Commands::S { hosts: val });
+    assert_eq!(
+        cli.find_session_name(&mut session).unwrap(),
+        "s_andonemore_morehost_testhost".to_string()
+    );
 }
 
 /// Some additional functions for Cli, to make our life easier
