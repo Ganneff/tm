@@ -497,6 +497,12 @@ impl Cli {
 struct Session {
     /// The session name
     sesname: String,
+    /// Should this be "grouped" - shares the same set of windows, new
+    /// windows are linked to all sessions in the group, any window
+    /// closed is removed from all sessions. But sessions are
+    /// seperate, as are their current/previous window and session
+    /// options.
+    grouped: bool,
 }
 
 impl Session {
@@ -546,14 +552,37 @@ impl Session {
     }
 
     /// Attach to a running (or just prepared) tmux session
-    fn attach(&self) -> Result<bool, tmux_interface::Error> {
+    fn attach(&mut self) -> Result<bool, tmux_interface::Error> {
         trace!("Entering attach()");
         let ret = if self.exists() {
-            TmuxCommand::new()
-                .attach_session()
-                .target_session(&self.sesname)
-                .output()?;
-            true
+            if self.grouped {
+                let mut rng = rand::thread_rng();
+                let insert: u16 = rng.gen();
+                let oldsesname = self.sesname.clone();
+                self.sesname = format!("{}_{}", insert, oldsesname);
+                debug!(
+                    "Grouped session wanted, setting new session {}, linking it with {}",
+                    self.sesname, oldsesname
+                );
+
+                TmuxCommand::new()
+                    .new_session()
+                    .session_name(&self.sesname)
+                    .group_name(&oldsesname)
+                    .output()?;
+                info!(
+                    "Removing grouped session {} (not the original!)",
+                    &self.sesname
+                );
+                self.kill();
+                true
+            } else {
+                TmuxCommand::new()
+                    .attach_session()
+                    .target_session(&self.sesname)
+                    .output()?;
+                true
+            }
         } else {
             false
         };
@@ -1214,7 +1243,13 @@ fn main() -> Result<()> {
         ..Default::default()
     };
 
+    // First get a session name
     let sesname = cli.find_session_name(&mut session)?;
+    // Should, if we attach, this be grouped?
+    if cli.group {
+        session.grouped = true;
+    }
+
     // First we check what the tm shell called "getopt-style"
     if cli.ls {
         ls();
@@ -1241,12 +1276,12 @@ fn main() -> Result<()> {
     } else if cli.sshhosts != None {
         trace!("ssh called");
         if session.exists() {
-            attach_session!(&session);
+            attach_session!(&mut session);
         } else {
             match ssh(cli.get_hosts()?, &sesname) {
                 Ok(val) => {
                     trace!("Session opened ({:#?}), now attaching", val);
-                    attach_session!(session);
+                    attach_session!(&mut session);
                 }
                 Err(val) => error!("Could not finish session setup: {}", val),
             }
@@ -1254,12 +1289,12 @@ fn main() -> Result<()> {
     } else if cli.multihosts != None {
         trace!("ms called");
         if session.exists() {
-            attach_session!(&session);
+            attach_session!(&mut session);
         } else {
             match syncssh(cli.get_hosts()?, &sesname) {
                 Ok(val) => {
                     trace!("Session opened ({:#?}), now attaching", val);
-                    attach_session!(session);
+                    attach_session!(&mut session);
                 }
                 Err(val) => error!("Could not finish session setup: {}", val),
             }
@@ -1280,12 +1315,12 @@ fn main() -> Result<()> {
             Commands::S { hosts: _ } => {
                 trace!("ssh subcommand called");
                 if session.exists() {
-                    attach_session!(&session);
+                    attach_session!(&mut session);
                 } else {
                     match ssh(cli.get_hosts()?, &sesname) {
                         Ok(val) => {
                             trace!("Session opened ({:#?}), now attaching", val);
-                            attach_session!(session);
+                            attach_session!(&mut session);
                         }
                         Err(val) => error!("Could not finish session setup: {}", val),
                     }
@@ -1294,12 +1329,12 @@ fn main() -> Result<()> {
             Commands::Ms { hosts: _ } => {
                 trace!("ms subcommand called");
                 if session.exists() {
-                    attach_session!(&session);
+                    attach_session!(&mut session);
                 } else {
                     match syncssh(cli.get_hosts()?, &sesname) {
                         Ok(val) => {
                             trace!("Session opened ({:#?}), now attaching", val);
-                            attach_session!(session);
+                            attach_session!(&mut session);
                         }
                         Err(val) => error!("Could not finish session setup: {}", val),
                     }
