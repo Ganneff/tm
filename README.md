@@ -42,16 +42,28 @@ Need to adapt docs from the old [README.org](old/README.org) to here.
   - [X] Support ++TMREPLACETM++
 - [ ] Extended config files (.cfg ending)
 
-# How to build
+# Installation
+## How to build
 You need [Rust](https://www.rust-lang.org/) on your machine,
 installation of that is described at [Rust Install](https://www.rust-lang.org/tools/install).
 
-Afterwards [Cargo](https://doc.rust-lang.org/cargo/), the Rust Package
-manager, will help you along, `cargo build --release` should suffice
-to install all needed Rust packages and build a binary. Output file
-will be _target/release/tm_.
+Git clone this repository, afterwards
+[Cargo](https://doc.rust-lang.org/cargo/), the Rust Package manager,
+will help you along, `cargo build --release` should suffice to install
+all needed Rust packages and build a binary. Output file will be
+_target/release/tm_.
 
-## (Possibly Breaking) notable changes compared to old shell version
+## Pre-build binaries
+If you trust Github Actions, you can download a binary built using
+them at [the releases
+page](https://github.com/Ganneff/tm/releases/latest). One is for Apple
+(entirely untested, I do not own such a machine. It compiles, so we
+ship it...), two are for Linux. One of them links against glibc
+(linux-gnu), one uses musl and is fully statically linked. No
+functional difference, the musl one will work even on older Linux
+releases, the glibc one may require a more recent glibc installed.
+
+# (Possibly Breaking) notable changes compared to old shell version
 While the rewrite is intended to be as much as possible compatible to
 the shell variant from earlier, this is not entirely possible. Shell
 *is* a bit different environment after all, and some things that work
@@ -61,12 +73,12 @@ binary now, as they depend on shell internal behaviour.
 The folowing is a (possibly) incomplete list of known behaviour
 changes.
 
-### LIST commands using ssh possibly requiring pseudo-terminal
+## LIST commands using ssh possibly requiring pseudo-terminal
 Some commands (eg. sudo can be configured for this) may require a
 pseudo-terminal or they refuse work. Add `-tt` to the ssh commandline
 to force allocation of one.
 
-### LIST commands in simple config files
+## LIST commands in simple config files
 The LIST commands in simple config files need to be checked for
 correct quoting. Example:
 
