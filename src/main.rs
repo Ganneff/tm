@@ -650,6 +650,25 @@ macro_rules! fromenvstatic {
     };
 }
 
+#[test]
+fn test_fromenvstatic() {
+    // Testing with env vars isn't nice - users may set them randomly.
+    // So pre-define a known set, so we at least can test the code
+    // around fromenvstatic
+    env::set_var("TMPDIR", "/tmp");
+    env::set_var("TMOPTS", "-2");
+    env::set_var("TMSORT", "true");
+    env::set_var("TMSESSHOST", "false");
+    env::set_var("TMSSHCMD", "ssh");
+    env::set_var("TNWIN", "1");
+    assert_eq!(*TMPDIR, "/tmp");
+    assert_eq!(*TMOPTS, "-2");
+    assert_eq!(*TMSORT, true);
+    assert_eq!(*TMSESSHOST, false);
+    assert_eq!(*TMSSHCMD, "ssh");
+    assert_eq!(*TMWIN, 1);
+}
+
 /// Set an option for a tmux window
 ///
 /// tmux windows can have a large set of options attached. We do
