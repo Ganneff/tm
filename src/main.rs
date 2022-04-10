@@ -43,9 +43,6 @@ use std::{
 };
 use tmux_interface::TmuxCommand;
 
-#[cfg(test)]
-use regex::Regex;
-
 #[derive(Debug, Parser)]
 #[clap(author, version, about)]
 #[clap(propagate_version = true)]
@@ -140,145 +137,6 @@ struct Cli {
     session: Option<String>,
 }
 
-// Lets try to test the cmdline interface, so we are halfway sure, we
-// stay as compatible to the old tm as possible
-#[test]
-#[allow(clippy::bool_assert_comparison)]
-fn test_cmdline_getopts_simpleopt() {
-    let mut session = Session {
-        ..Default::default()
-    };
-    // No option
-    let mut cli = Cli::parse_from("tm".split_whitespace());
-    assert_eq!(
-        cli.find_session_name(&mut session).unwrap(),
-        "Unhandled_command_so_unknown_session_name".to_string()
-    );
-
-    // Just a session
-    cli = Cli::parse_from("tm foo".split_whitespace());
-    assert_eq!(
-        cli.find_session_name(&mut session).unwrap(),
-        "foo".to_string()
-    );
-
-    // -l is ls
-    cli = Cli::parse_from("tm -l".split_whitespace());
-    assert_eq!(cli.ls, true);
-
-    // -k to kill a session
-    cli = Cli::parse_from("tm -k killsession".split_whitespace());
-    assert_eq!(cli.kill, Some("killsession".to_string()));
-    assert_eq!(
-        cli.find_session_name(&mut session).unwrap(),
-        "killsession".to_string()
-    );
-
-    // -k to kill a session - second value on commandline should not
-    // adjust session name.
-    cli = Cli::parse_from("tm -k session ses2".split_whitespace());
-    assert_eq!(cli.session, Some("ses2".to_string()));
-    assert_eq!(
-        cli.find_session_name(&mut session).unwrap(),
-        "session".to_string()
-    );
-
-    // -v/-q goes via clap_verbosity, just check that we did not suddenly redefine it
-    assert_eq!(cli.verbose.log_level_filter(), log::LevelFilter::Error);
-    assert_eq!(cli.verbose.is_silent(), false);
-    cli = Cli::parse_from("tm -v".split_whitespace());
-    assert_eq!(cli.verbose.log_level_filter(), log::LevelFilter::Warn);
-    assert_eq!(cli.verbose.is_silent(), false);
-    cli = Cli::parse_from("tm -vvvv".split_whitespace());
-    assert_eq!(cli.verbose.log_level_filter(), log::LevelFilter::Trace);
-    cli = Cli::parse_from("tm -q".split_whitespace());
-    assert_eq!(cli.verbose.log_level_filter(), log::LevelFilter::Off);
-    assert_eq!(cli.verbose.is_silent(), true);
-
-    // -n wants a second session to same hosts as existing one
-    let mut cli = Cli::parse_from("tm -n".split_whitespace());
-    assert_eq!(cli.second, true);
-
-    // -g attaches existing session, but different window config
-    cli = Cli::parse_from("tm -g".split_whitespace());
-    assert_eq!(cli.group, true);
-}
-
-#[test]
-#[allow(clippy::bool_assert_comparison)]
-fn test_cmdline_getopts_s() {
-    let mut session = Session {
-        ..Default::default()
-    };
-    // -s is ssh to one or more hosts
-    let mut cli = Cli::parse_from("tm -s testhost".split_whitespace());
-    assert_eq!(cli.sshhosts, Some(vec!["testhost".to_string()]));
-    assert_eq!(
-        cli.find_session_name(&mut session).unwrap(),
-        "s_testhost".to_string()
-    );
-    cli = Cli::parse_from("tm -s testhost morehost andonemore".split_whitespace());
-    assert_eq!(
-        cli.sshhosts,
-        Some(vec![
-            "testhost".to_string(),
-            "morehost".to_string(),
-            "andonemore".to_string()
-        ])
-    );
-    assert_eq!(
-        cli.find_session_name(&mut session).unwrap(),
-        "s_andonemore_morehost_testhost".to_string()
-    );
-
-    // Combine with -n
-    cli = Cli::parse_from("tm -n -s testhost".split_whitespace());
-    let sesname = cli.find_session_name(&mut session).unwrap();
-    // -n puts a random number into the name, so check with regex
-    let re = Regex::new(r"^s_\d+_testhost$").unwrap();
-    assert_eq!(re.is_match(&sesname), true);
-    assert_ne!(
-        cli.find_session_name(&mut session).unwrap(),
-        "s_testhost".to_string()
-    );
-}
-
-#[test]
-#[allow(clippy::bool_assert_comparison)]
-fn test_cmdline_getopts_ms() {
-    let mut session = Session {
-        ..Default::default()
-    };
-
-    // -m is ssh to one or more hosts, synchronized input
-    let mut cli = Cli::parse_from("tm -m testhost".split_whitespace());
-    assert_eq!(cli.multihosts, Some(vec!["testhost".to_string()]));
-    cli = Cli::parse_from("tm -m testhost morehost andonemore".split_whitespace());
-    assert_eq!(
-        cli.multihosts,
-        Some(vec![
-            "testhost".to_string(),
-            "morehost".to_string(),
-            "andonemore".to_string()
-        ])
-    );
-    assert_eq!(
-        cli.find_session_name(&mut session).unwrap(),
-        "ms_andonemore_morehost_testhost".to_string()
-    );
-
-    // Combine with -n
-    cli = Cli::parse_from("tm -n ms testhost morehost".split_whitespace());
-    let sesname = cli.find_session_name(&mut session).unwrap();
-    // -n puts a random number into the name, so check with regex
-    let re = Regex::new(r"^ms_\d+_morehost_testhost$").unwrap();
-    assert_eq!(re.is_match(&sesname), true);
-    assert_ne!(
-        cli.find_session_name(&mut session).unwrap(),
-        "ms_morehost_testhosts".to_string()
-    );
-}
-
 #[derive(Subcommand, Debug, PartialEq)]
 /// Holds list of subcommands in use for tm
 enum Commands {
@@ -322,75 +180,6 @@ enum Commands {
         #[clap(required = true)]
         sesname: String,
     },
-}
-
-#[test]
-#[allow(clippy::bool_assert_comparison)]
-fn test_cmdline_ls() {
-    let mut cli = Cli::parse_from("tm ls".split_whitespace());
-    assert_eq!(cli.ls, false);
-    assert_eq!(cli.command, Some(Commands::Ls {}));
-
-    // -v/-q goes via clap_verbosity, just check that we did not suddenly redefine it
-    assert_eq!(cli.verbose.log_level_filter(), log::LevelFilter::Error);
-    assert_eq!(cli.verbose.is_silent(), false);
-    cli = Cli::parse_from("tm -v".split_whitespace());
-    assert_eq!(cli.verbose.log_level_filter(), log::LevelFilter::Warn);
-    assert_eq!(cli.verbose.is_silent(), false);
-}
-
-#[test]
-#[allow(clippy::bool_assert_comparison)]
-fn test_cmdline_s() {
-    let mut session = Session {
-        ..Default::default()
-    };
-    // s is ssh to one or more hosts
-    let mut cli = Cli::parse_from("tm s testhost".split_whitespace());
-    let mut cc = cli.command.as_ref().unwrap();
-    let mut val = vec!["testhost".to_string()];
-    assert_eq!(cc, &Commands::S { hosts: val });
-    assert_eq!(
-        cli.find_session_name(&mut session).unwrap(),
-        "s_testhost".to_string()
-    );
-    cli = Cli::parse_from("tm s testhost morehost andonemore".split_whitespace());
-    cc = cli.command.as_ref().unwrap();
-    val = vec![
-        "testhost".to_string(),
-        "morehost".to_string(),
-        "andonemore".to_string(),
-    ];
-    assert_eq!(cc, &Commands::S { hosts: val });
-    assert_eq!(
-        cli.find_session_name(&mut session).unwrap(),
-        "s_andonemore_morehost_testhost".to_string()
-    );
-}
-
-#[test]
-#[allow(clippy::bool_assert_comparison)]
-fn test_cmdline_k() {
-    let mut session = Session {
-        ..Default::default()
-    };
-    // k is kill that session
-    let cli = Cli::parse_from("tm k session".split_whitespace());
-    assert_eq!(
-        cli.find_session_name(&mut session).unwrap(),
-        "session".to_string()
-    );
-    let cc = cli.command.as_ref().unwrap();
-    assert_eq!(
-        cc,
-        &Commands::K {
-            sesname: "session".to_string()
-        }
-    );
-    assert_eq!(
-        cli.find_session_name(&mut session).unwrap(),
-        "session".to_string()
-    );
 }
 
 /// Some additional functions for Cli, to make our life easier
@@ -778,27 +567,6 @@ impl Session {
     }
 }
 
-#[test]
-fn test_set_name() {
-    let mut session = Session {
-        ..Default::default()
-    };
-
-    assert_eq!("test", session.set_name("test").unwrap());
-    assert_eq!("test_second", session.set_name("test second").unwrap());
-    assert_eq!("test_third", session.set_name("test:third").unwrap());
-    assert_eq!(
-        "test_fourth_fifth",
-        session.set_name("test fourth fifth").unwrap()
-    );
-    assert_eq!(
-        "test_fourth_fifth_more_words_here_set_in",
-        session
-            .set_name("test fourth_fifth:more words here\"set in")
-            .unwrap()
-    );
-}
-
 /// Help setting up static variables based on user environment.
 ///
 /// We allow the user to configure certain properties/behaviours of tm
@@ -835,25 +603,6 @@ macro_rules! fromenvstatic {
             Err(_) => $default,
         }
     };
-}
-
-#[test]
-fn test_fromenvstatic() {
-    // Testing with env vars isn't nice - users may set them randomly.
-    // So pre-define a known set, so we at least can test the code
-    // around fromenvstatic
-    env::set_var("TMPDIR", "/tmp");
-    env::set_var("TMOPTS", "-2");
-    env::set_var("TMSORT", "true");
-    env::set_var("TMSESSHOST", "false");
-    env::set_var("TMSSHCMD", "ssh");
-    env::set_var("TNWIN", "1");
-    assert_eq!(*TMPDIR, "/tmp");
-    assert_eq!(*TMOPTS, "-2");
-    assert_eq!(*TMSORT, true);
-    assert_eq!(*TMSESSHOST, false);
-    assert_eq!(*TMSSHCMD, "ssh");
-    assert_eq!(*TMWIN, 1);
 }
 
 /// Set an option for a tmux window
@@ -938,26 +687,6 @@ macro_rules! newtmuxsession {
             .shell_command($shellcommand)
             .output()?;
     };
-}
-
-#[test]
-fn test_kill_and_exists() {
-    let mut session = Session {
-        ..Default::default()
-    };
-    session.set_name("tmtestsession").unwrap();
-    assert_eq!(false, session.exists());
-    TmuxCommand::new()
-        .new_session()
-        .session_name(&session.sesname)
-        .detached()
-        .shell_command("/bin/bash")
-        .output()
-        .unwrap();
-    assert_eq!(true, session.exists());
-    assert_eq!(true, session.kill().unwrap());
-    assert!(session.kill().is_err());
-    assert_eq!(false, session.exists());
 }
 
 // A bunch of "static" variables, though computed at program start, as they
@@ -1185,19 +914,6 @@ fn tmreplace(input: &str, replace: &Option<String>) -> Result<String> {
     }
 }
 
-#[test]
-fn test_tmreplace() {
-    assert_eq!(tmreplace("test", &None).unwrap(), "test".to_string());
-    assert_eq!(
-        tmreplace("test", &Some("foo".to_string())).unwrap(),
-        "test".to_string()
-    );
-    assert_eq!(
-        tmreplace("test++TMREPLACETM++", &Some("foo".to_string())).unwrap(),
-        "testfoo".to_string()
-    );
-}
-
 /// Parse a line of a simple_config file.
 ///
 /// If a LIST command is found, execute that, and parse its output -
@@ -1286,48 +1002,6 @@ fn parse_line(line: &str, replace: &Option<String>, current_dir: &Path) -> Resul
             Ok(vec![])
         }
     }
-}
-
-#[test]
-fn test_parse_line() {
-    let mut line = "justonehost";
-    let mut replace = None;
-    let mut current_dir = Path::new("/");
-    let mut res = parse_line(&line, &replace, &current_dir).unwrap();
-    assert_eq!(res, vec!["justonehost".to_string()]);
-    line = "LIST /bin/echo \"onehost\ntwohost\nthreehost\"";
-    replace = None;
-    current_dir = Path::new("/");
-    res = parse_line(&line, &replace, &current_dir).unwrap();
-    assert_eq!(
-        res,
-        vec![
-            "onehost".to_string(),
-            "twohost".to_string(),
-            "threehost".to_string()
-        ]
-    );
-    line = "LIST /bin/echo \"onehost\ntwohost\nthreehost\nfoobar\nLIST /bin/echo \"LIST /bin/echo \"bar\nbaz\n\"\n\"\"";
-    replace = None;
-    current_dir = Path::new("/");
-    res = parse_line(&line, &replace, &current_dir).unwrap();
-    assert_eq!(
-        res,
-        vec![
-            "onehost".to_string(),
-            "twohost".to_string(),
-            "threehost".to_string(),
-            "foobar".to_string(),
-            "bar".to_string(),
-            "baz".to_string()
-        ]
-    );
-    line = " ";
-    replace = None;
-    current_dir = Path::new("/");
-    res = parse_line(&line, &replace, &current_dir).unwrap();
-    let empty: Vec<String> = vec![];
-    assert_eq!(res, empty);
 }
 
 /// main, start it all off
@@ -1463,4 +1137,332 @@ fn main() -> Result<()> {
     }
     info!("All done, end");
     Ok(())
+}
+
+// Lets try to test the cmdline interface, so we are halfway sure, we
+// stay as compatible to the old tm as possible
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use regex::Regex;
+
+    #[test]
+    #[allow(clippy::bool_assert_comparison)]
+    fn test_cmdline_getopts_simpleopt() {
+        let mut session = Session {
+            ..Default::default()
+        };
+        // No option
+        let mut cli = Cli::parse_from("tm".split_whitespace());
+        assert_eq!(
+            cli.find_session_name(&mut session).unwrap(),
+            "Unhandled_command_so_unknown_session_name".to_string(),
+        );
+
+        // Just a session
+        cli = Cli::parse_from("tm foo".split_whitespace());
+        assert_eq!(
+            cli.find_session_name(&mut session).unwrap(),
+            "foo".to_string()
+        );
+
+        // -l is ls
+        cli = Cli::parse_from("tm -l".split_whitespace());
+        assert_eq!(cli.ls, true);
+
+        // -k to kill a session
+        cli = Cli::parse_from("tm -k killsession".split_whitespace());
+        assert_eq!(cli.kill, Some("killsession".to_string()));
+        assert_eq!(
+            cli.find_session_name(&mut session).unwrap(),
+            "killsession".to_string()
+        );
+
+        // -k to kill a session - second value on commandline should not
+        // adjust session name.
+        cli = Cli::parse_from("tm -k session ses2".split_whitespace());
+        assert_eq!(cli.session, Some("ses2".to_string()));
+        assert_eq!(
+            cli.find_session_name(&mut session).unwrap(),
+            "session".to_string()
+        );
+
+        // -v/-q goes via clap_verbosity, just check that we did not suddenly redefine it
+        assert_eq!(cli.verbose.log_level_filter(), log::LevelFilter::Error);
+        assert_eq!(cli.verbose.is_silent(), false);
+        cli = Cli::parse_from("tm -v".split_whitespace());
+        assert_eq!(cli.verbose.log_level_filter(), log::LevelFilter::Warn);
+        assert_eq!(cli.verbose.is_silent(), false);
+        cli = Cli::parse_from("tm -vvvv".split_whitespace());
+        assert_eq!(cli.verbose.log_level_filter(), log::LevelFilter::Trace);
+        cli = Cli::parse_from("tm -q".split_whitespace());
+        assert_eq!(cli.verbose.log_level_filter(), log::LevelFilter::Off);
+        assert_eq!(cli.verbose.is_silent(), true);
+
+        // -n wants a second session to same hosts as existing one
+        let mut cli = Cli::parse_from("tm -n".split_whitespace());
+        assert_eq!(cli.second, true);
+
+        // -g attaches existing session, but different window config
+        cli = Cli::parse_from("tm -g".split_whitespace());
+        assert_eq!(cli.group, true);
+    }
+
+    #[test]
+    #[allow(clippy::bool_assert_comparison)]
+    fn test_cmdline_getopts_s() {
+        let mut session = Session {
+            ..Default::default()
+        };
+        // -s is ssh to one or more hosts
+        let mut cli = Cli::parse_from("tm -s testhost".split_whitespace());
+        assert_eq!(cli.sshhosts, Some(vec!["testhost".to_string()]));
+        assert_eq!(
+            cli.find_session_name(&mut session).unwrap(),
+            "s_testhost".to_string()
+        );
+        cli = Cli::parse_from("tm -s testhost morehost andonemore".split_whitespace());
+        assert_eq!(
+            cli.sshhosts,
+            Some(vec![
+                "testhost".to_string(),
+                "morehost".to_string(),
+                "andonemore".to_string()
+            ])
+        );
+        assert_eq!(
+            cli.find_session_name(&mut session).unwrap(),
+            "s_andonemore_morehost_testhost".to_string()
+        );
+
+        // Combine with -n
+        cli = Cli::parse_from("tm -n -s testhost".split_whitespace());
+        let sesname = cli.find_session_name(&mut session).unwrap();
+        // -n puts a random number into the name, so check with regex
+        let re = Regex::new(r"^s_\d+_testhost$").unwrap();
+        assert_eq!(re.is_match(&sesname), true);
+        assert_ne!(
+            cli.find_session_name(&mut session).unwrap(),
+            "s_testhost".to_string()
+        );
+    }
+
+    #[test]
+    #[allow(clippy::bool_assert_comparison)]
+    fn test_cmdline_getopts_ms() {
+        let mut session = Session {
+            ..Default::default()
+        };
+
+        // -m is ssh to one or more hosts, synchronized input
+        let mut cli = Cli::parse_from("tm -m testhost".split_whitespace());
+        assert_eq!(cli.multihosts, Some(vec!["testhost".to_string()]));
+        cli = Cli::parse_from("tm -m testhost morehost andonemore".split_whitespace());
+        assert_eq!(
+            cli.multihosts,
+            Some(vec![
+                "testhost".to_string(),
+                "morehost".to_string(),
+                "andonemore".to_string()
+            ])
+        );
+        assert_eq!(
+            cli.find_session_name(&mut session).unwrap(),
+            "ms_andonemore_morehost_testhost".to_string()
+        );
+
+        // Combine with -n
+        cli = Cli::parse_from("tm -n ms testhost morehost".split_whitespace());
+        let sesname = cli.find_session_name(&mut session).unwrap();
+        // -n puts a random number into the name, so check with regex
+        let re = Regex::new(r"^ms_\d+_morehost_testhost$").unwrap();
+        assert_eq!(re.is_match(&sesname), true);
+        assert_ne!(
+            cli.find_session_name(&mut session).unwrap(),
+            "ms_morehost_testhosts".to_string()
+        );
+    }
+    #[test]
+    #[allow(clippy::bool_assert_comparison)]
+    fn test_cmdline_ls() {
+        let mut cli = Cli::parse_from("tm ls".split_whitespace());
+        assert_eq!(cli.ls, false);
+        assert_eq!(cli.command, Some(Commands::Ls {}));
+
+        // -v/-q goes via clap_verbosity, just check that we did not suddenly redefine it
+        assert_eq!(cli.verbose.log_level_filter(), log::LevelFilter::Error);
+        assert_eq!(cli.verbose.is_silent(), false);
+        cli = Cli::parse_from("tm -v".split_whitespace());
+        assert_eq!(cli.verbose.log_level_filter(), log::LevelFilter::Warn);
+        assert_eq!(cli.verbose.is_silent(), false);
+    }
+
+    #[test]
+    #[allow(clippy::bool_assert_comparison)]
+    fn test_cmdline_s() {
+        let mut session = Session {
+            ..Default::default()
+        };
+        // s is ssh to one or more hosts
+        let mut cli = Cli::parse_from("tm s testhost".split_whitespace());
+        let mut cc = cli.command.as_ref().unwrap();
+        let mut val = vec!["testhost".to_string()];
+        assert_eq!(cc, &Commands::S { hosts: val });
+        assert_eq!(
+            cli.find_session_name(&mut session).unwrap(),
+            "s_testhost".to_string()
+        );
+        cli = Cli::parse_from("tm s testhost morehost andonemore".split_whitespace());
+        cc = cli.command.as_ref().unwrap();
+        val = vec![
+            "testhost".to_string(),
+            "morehost".to_string(),
+            "andonemore".to_string(),
+        ];
+        assert_eq!(cc, &Commands::S { hosts: val });
+        assert_eq!(
+            cli.find_session_name(&mut session).unwrap(),
+            "s_andonemore_morehost_testhost".to_string()
+        );
+    }
+
+    #[test]
+    #[allow(clippy::bool_assert_comparison)]
+    fn test_cmdline_k() {
+        let mut session = Session {
+            ..Default::default()
+        };
+        // k is kill that session
+        let cli = Cli::parse_from("tm k session".split_whitespace());
+        assert_eq!(
+            cli.find_session_name(&mut session).unwrap(),
+            "session".to_string()
+        );
+        let cc = cli.command.as_ref().unwrap();
+        assert_eq!(
+            cc,
+            &Commands::K {
+                sesname: "session".to_string()
+            }
+        );
+        assert_eq!(
+            cli.find_session_name(&mut session).unwrap(),
+            "session".to_string()
+        );
+    }
+
+    #[test]
+    fn test_set_name() {
+        let mut session = Session {
+            ..Default::default()
+        };
+
+        assert_eq!("test", session.set_name("test").unwrap());
+        assert_eq!("test_second", session.set_name("test second").unwrap());
+        assert_eq!("test_third", session.set_name("test:third").unwrap());
+        assert_eq!(
+            "test_fourth_fifth",
+            session.set_name("test fourth fifth").unwrap()
+        );
+        assert_eq!(
+            "test_fourth_fifth_more_words_here_set_in",
+            session
+                .set_name("test fourth_fifth:more words here\"set in")
+                .unwrap()
+        );
+    }
+
+    #[test]
+    fn test_fromenvstatic() {
+        // Testing with env vars isn't nice - users may set them randomly.
+        // So pre-define a known set, so we at least can test the code
+        // around fromenvstatic
+        env::set_var("TMPDIR", "/tmp");
+        env::set_var("TMOPTS", "-2");
+        env::set_var("TMSORT", "true");
+        env::set_var("TMSESSHOST", "false");
+        env::set_var("TMSSHCMD", "ssh");
+        env::set_var("TNWIN", "1");
+        assert_eq!(*TMPDIR, "/tmp");
+        assert_eq!(*TMOPTS, "-2");
+        assert_eq!(*TMSORT, true);
+        assert_eq!(*TMSESSHOST, false);
+        assert_eq!(*TMSSHCMD, "ssh");
+        assert_eq!(*TMWIN, 1);
+    }
+
+    #[test]
+    fn test_kill_and_exists() {
+        let mut session = Session {
+            ..Default::default()
+        };
+        session.set_name("tmtestsession").unwrap();
+        assert_eq!(false, session.exists());
+        TmuxCommand::new()
+            .new_session()
+            .session_name(&session.sesname)
+            .detached()
+            .shell_command("/bin/bash")
+            .output()
+            .unwrap();
+        assert_eq!(true, session.exists());
+        assert_eq!(true, session.kill().unwrap());
+        assert!(session.kill().is_err());
+        assert_eq!(false, session.exists());
+    }
+
+    #[test]
+    fn test_tmreplace() {
+        assert_eq!(tmreplace("test", &None).unwrap(), "test".to_string());
+        assert_eq!(
+            tmreplace("test", &Some("foo".to_string())).unwrap(),
+            "test".to_string()
+        );
+        assert_eq!(
+            tmreplace("test++TMREPLACETM++", &Some("foo".to_string())).unwrap(),
+            "testfoo".to_string()
+        );
+    }
+
+    #[test]
+    fn test_parse_line() {
+        let mut line = "justonehost";
+        let mut replace = None;
+        let mut current_dir = Path::new("/");
+        let mut res = parse_line(&line, &replace, &current_dir).unwrap();
+        assert_eq!(res, vec!["justonehost".to_string()]);
+        line = "LIST /bin/echo \"onehost\ntwohost\nthreehost\"";
+        replace = None;
+        current_dir = Path::new("/");
+        res = parse_line(&line, &replace, &current_dir).unwrap();
+        assert_eq!(
+            res,
+            vec![
+                "onehost".to_string(),
+                "twohost".to_string(),
+                "threehost".to_string()
+            ]
+        );
+        line = "LIST /bin/echo \"onehost\ntwohost\nthreehost\nfoobar\nLIST /bin/echo \"LIST /bin/echo \"bar\nbaz\n\"\n\"\"";
+        replace = None;
+        current_dir = Path::new("/");
+        res = parse_line(&line, &replace, &current_dir).unwrap();
+        assert_eq!(
+            res,
+            vec![
+                "onehost".to_string(),
+                "twohost".to_string(),
+                "threehost".to_string(),
+                "foobar".to_string(),
+                "bar".to_string(),
+                "baz".to_string()
+            ]
+        );
+        line = " ";
+        replace = None;
+        current_dir = Path::new("/");
+        res = parse_line(&line, &replace, &current_dir).unwrap();
+        let empty: Vec<String> = vec![];
+        assert_eq!(res, empty);
+    }
 }
