@@ -536,7 +536,7 @@ impl Session {
     }
 
     /// Kill a session
-    fn kill(&self) {
+    fn kill(&self) -> Result<bool> {
         trace!("Session.kill()");
         if self.exists() {
             debug!("Asked to kill session {}", self.sesname);
@@ -550,11 +550,14 @@ impl Session {
                 .success()
             {
                 info!("Session {} is no more", self.sesname);
+                Ok(true)
             } else {
                 info!("Session {} could not be killed!", self.sesname);
+                Err(anyhow!("Session {} could not be killed!", self.sesname))
             }
         } else {
             debug!("No such session {}", self.sesname);
+            Err(anyhow!("No such session {}", self.sesname))
         }
     }
 
@@ -571,7 +574,7 @@ impl Session {
     }
 
     /// Attach to a running (or just prepared) tmux session
-    fn attach(&mut self) -> Result<bool, tmux_interface::Error> {
+    fn attach(&mut self) -> Result<bool> {
         trace!("Entering attach()");
         let ret = if self.exists() {
             if self.grouped {
@@ -593,7 +596,7 @@ impl Session {
                     "Removing grouped session {} (not the original!)",
                     &self.sesname
                 );
-                self.kill();
+                self.kill()?;
                 true
             } else {
                 TmuxCommand::new()
@@ -1345,7 +1348,7 @@ fn main() -> Result<()> {
     if cli.ls {
         ls();
     } else if cli.kill.is_some() {
-        session.kill();
+        session.kill()?;
     } else if cli.session.is_some() {
         let sespath = Path::join(Path::new(&*TMDIR), Path::new(&cli.session.clone().unwrap()));
         if Path::new(&sespath).exists() {
@@ -1434,7 +1437,7 @@ fn main() -> Result<()> {
             }
             Commands::K { sesname } => {
                 trace!("k subcommand called, killing {sesname}");
-                session.kill();
+                session.kill()?;
             }
         }
     }
