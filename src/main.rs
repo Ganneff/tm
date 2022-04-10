@@ -26,6 +26,7 @@ extern crate lazy_static;
 use anyhow::{anyhow, Result};
 use clap::{Parser, Subcommand};
 use directories::UserDirs;
+use enum_default::EnumDefault;
 use flexi_logger::{AdaptiveFormat, Logger};
 use home_dir::HomeDirExt;
 use log::{debug, error, info, trace};
@@ -33,10 +34,10 @@ use rand::Rng;
 use shlex::Shlex;
 use std::{
     env,
-    ffi::OsString,
+    ffi::{OsStr, OsString},
     fs::File,
     io::{BufRead, BufReader},
-    path::Path,
+    path::{Path, PathBuf},
     process::Command,
     str::FromStr,
 };
@@ -492,6 +493,16 @@ impl Cli {
     }
 }
 
+#[derive(EnumDefault, Debug)]
+/// Possible Session types
+enum SessionType {
+    #[default]
+    /// Simple - 2 initial lines, followed by 1 to many SSH destinations
+    Simple,
+    /// Extended - 2 initial lines, followed by 1 to many tmux commands
+    Extended,
+}
+
 #[derive(Debug, Default)]
 /// Store session related information
 struct Session {
@@ -503,6 +514,14 @@ struct Session {
     /// seperate, as are their current/previous window and session
     /// options.
     grouped: bool,
+    /// The path to a session file
+    sesfile: PathBuf,
+    /// Type of session (file), from extension of file
+    sestype: SessionType,
+    /// List of SSH Destinations / commands for the session
+    targets: Vec<String>,
+    /// Token for the string replacement in session files
+    replace: Option<String>,
 }
 
 impl Session {
@@ -588,6 +607,171 @@ impl Session {
         };
         trace!("Leaving attach with result {}", ret);
         Ok(ret)
+    }
+
+    /// Read and parse a session file, run an action to create the session, then attach to it.
+    ///
+    /// This will create a new tmux session according to the session file, either a _simple_ or an _extended_
+    /// style config file found at `sesfile`.
+    ///
+    /// # Config file formats
+    /// ## Simple
+    /// The _simple_ config style is a line based one, with the following properties:
+    ///
+    /// 1. Session name
+    /// 1. Extra tmux command line options, most commonly **NONE**. _(currently options are unsupported in the rust tm version)_
+    /// 1. Either an SSH destination (\[user@]hostname) **or** the LIST command.
+    /// 1. [...] As many SSH destinations/LIST commands as wanted and needed.
+    ///
+    /// ### SSH destination
+    /// Taken from the ssh(1) manpage:
+    /// ssh connects and logs into the specified destination, which may be
+    /// specified as either \[user@]hostname or a URI of the form
+    /// ssh://\[user@]hostname\[:port].
+    ///
+    /// ### LIST command
+    /// Instead of an SSH destination, the command **LIST** followed by an
+    /// argument is also accepted. The argument must be a runnable command
+    /// that outputs a list of SSH destinations on stdout and exits
+    /// successfully.
+    ///
+    /// The command will be run in the same directory the simple config
+    /// file is found in.
+    ///
+    /// **Note**: This is recursive, so if output of a command contains
+    /// **LIST** again, it will also be executed and its output used.
+    /// There is no limit (except stack size) on recursion, so yes, you
+    /// can build a loop and then watch tm race to a panic..
+    ///
+    /// ## Extended
+    /// FIXME: Need to write some text
+    ///
+    /// # Example
+    /// The following will open a tmux session named `examplesession`, connection to two hosts.
+    /// ```
+    /// examplesession
+    /// NONE
+    /// ganneff@host1
+    /// user@host2
+    /// ```
+    ///
+    /// The following will open a tmux session `anotherexample`,
+    /// connecting to at least one host, but possibly more, depending on
+    /// how many lines of SSH destinations the `cat foo.list` command will
+    /// print to stdout.
+    /// ```
+    /// anotherexample
+    /// NONE
+    /// ganneff@host3
+    /// LIST cat foo.list
+    /// ```
+    fn read_session_file_and_attach(&mut self) -> Result<()> {
+        trace!("Entering read_session_file");
+        // Get the path of the session file
+        let sesfile = self.sesfile.clone();
+        let sesfilepath = sesfile.parent().ok_or_else(|| {
+            anyhow!(
+                "Could not determine directory for {}",
+                self.sesfile.display()
+            )
+        })?;
+        // Check if the file exists
+        if !self.sesfile.exists() {
+            return Err(anyhow!("Session file {} not found", self.sesfile.display()));
+        }
+
+        match self.sesfile.extension().and_then(OsStr::to_str) {
+            None => self.sestype = SessionType::Simple,
+            Some(v) => match v {
+                "cfg" => self.sestype = SessionType::Extended,
+                &_ => return Err(anyhow!("Unknown file extension {v}")),
+            },
+        }
+
+        // Want to read the session config file
+        let sesreader = BufReader::new(File::open(&self.sesfile)?);
+        // Need session name later, default to Unknown, just in case
+        let mut sesname: String = "Unknown".to_owned();
+
+        let mut tmwin = *TMWIN;
+
+        for (index, line) in sesreader.lines().enumerate() {
+            trace!("Read line {}: {:?}", index + 1, line);
+            // Replace token, if exists
+            let line = tmreplace(&line?, &self.replace)?;
+            debug!("Processing line {}: '{}'", index + 1, line);
+            // Action to come depends on line we read and SessionType
+            match index {
+                0 => {
+                    // First line is session name
+                    debug!("Possible session name: {}", &line);
+                    // Before we get to this place, we already tried
+                    // looking for a session with the name the user gave
+                    // us as argument. And it did not exist.
+                    //
+                    // Unlucky us, this first line may NOT be the same as
+                    // that session name. So we check again, and if a
+                    // session name like this already exists, we error
+                    // out. Could, *maybe* attach to that? Unsure. Might
+                    // be surprising.
+                    if self.exists() {
+                        return Err(anyhow!(
+                        "Session name {} as read from file {:?} matches existing session, not recreating/messing with it.",
+                        line,
+                        self.sesfile
+                    ));
+                    } else {
+                        sesname = self.set_name(&line)?.to_string();
+                        debug!("Calculated session name: {}", sesname);
+                    }
+                }
+                1 => trace!("Ignoring 2nd line"),
+                _ => {
+                    debug!("Content line");
+                    // Third and following lines are "content", so for
+                    // simple configs either hostnames or LIST
+                    // commands, for extended ones they are commands.
+                    match &self.sestype {
+                        SessionType::Simple => {
+                            self.targets
+                                .append(&mut parse_line(&line, &self.replace, sesfilepath)?)
+                        }
+                        SessionType::Extended => {
+                            if line.contains("new-window") {
+                                tmwin += 1;
+                            }
+                            let modline = line
+                                .replace("SESSION", &self.sesname)
+                                .replace("$HOME", "~/")
+                                .replace("${HOME}", "~/")
+                                .replace("TMWIN", &tmwin.to_string())
+                                .expand_home()?
+                                .into_os_string()
+                                .into_string()
+                                .expect("String convert failed");
+                            self.targets.push(modline);
+                        }
+                    }
+                }
+            }
+        }
+        trace!("Finished parsing session file");
+        debug!("Targets: {:#?}", self.targets);
+        // Depending on session type, different action will happen
+        match &self.sestype {
+            SessionType::Simple => {
+                // We have a nice set of hosts and a session name, lets set it all up
+                match syncssh(self.targets.clone(), &sesname) {
+                    Ok(val) => {
+                        trace!("Session opened ({:#?}), now attaching", val);
+                        self.attach()?;
+                    }
+                    Err(val) => return Err(anyhow!("Could not finish session setup: {}", val)),
+                }
+            }
+            SessionType::Extended => unimplemented!("Not yet"),
+        }
+        Ok(())
     }
 }
 
@@ -991,7 +1175,7 @@ fn test_tmreplace() {
     );
 }
 
-/// Parse a line of a [simple_config] file.
+/// Parse a line of a simple_config file.
 ///
 /// If a LIST command is found, execute that, and parse its output -
 /// if that contains LIST again, recurse.
@@ -1123,121 +1307,6 @@ fn test_parse_line() {
     assert_eq!(res, empty);
 }
 
-/// Create a new session from a "simple" config file.
-///
-/// This will create a new tmux session according to the _simple_
-/// style config file found at `sesfile`. The format of those files is a
-/// simple line based one, with the following properties:
-///
-/// 1. Session name
-/// 1. Extra tmux command line options, most commonly **NONE**. _(currently options are unsupported in the rust tm version)_
-/// 1. Either an SSH destination (\[user@]hostname) **or** the LIST command.
-/// 1. [...] As many SSH destinations/LIST commands as wanted and needed.
-///
-/// # SSH destination
-/// Taken from the ssh(1) manpage:
-/// ssh connects and logs into the specified destination, which may be
-/// specified as either \[user@]hostname or a URI of the form
-/// ssh://\[user@]hostname\[:port].
-///
-/// # LIST command
-/// Instead of an SSH destination, the command **LIST** followed by an
-/// argument is also accepted. The argument must be a runnable command
-/// that outputs a list of SSH destinations on stdout and exits
-/// successfully.
-///
-/// The command will be run in the same directory the simple config
-/// file is found in.
-///
-/// **Note**: This is recursive, so if output of a command contains
-/// **LIST** again, it will also be executed and its output used.
-/// There is no limit (except stack size) on recursion, so yes, you
-/// can build a loop and then watch tm race to a panic..
-///
-/// # Example
-/// The following will open a tmux session named `examplesession`, connection to two hosts.
-/// ```
-/// examplesession
-/// NONE
-/// ganneff@host1
-/// user@host2
-/// ```
-///
-/// The following will open a tmux session `anotherexample`,
-/// connecting to at least one host, but possibly more, depending on
-/// how many lines of SSH destinations the `cat foo.list` command will
-/// print to stdout.
-/// ```
-/// anotherexample
-/// NONE
-/// ganneff@host3
-/// LIST cat foo.list
-/// ```
-fn simple_config(sesfile: &Path, replace: &Option<String>, session: &mut Session) -> Result<()> {
-    trace!("Entered simple_config, for session file: {:?}", sesfile);
-    // Needed for parse_line, to set directory for processes it may spawn
-    let sesfilepath = sesfile
-        .parent()
-        .ok_or_else(|| anyhow!("Could not determine directory for {}", sesfile.display()))?;
-    // Want to read the session config file
-    let sesreader = BufReader::new(File::open(sesfile)?);
-    // Need session name later, default to Unknown, just in case
-    let mut sesname: String = "Unknown".to_owned();
-    // Hosts, default to empty list
-    let mut hosts: Vec<String> = vec![];
-    // Loop over all lines in session file, index is nice to see in
-    // logs but much more important in match later
-    for (index, line) in sesreader.lines().enumerate() {
-        trace!("Read line {}: {:?}", index + 1, line);
-        // Replace token, if exists
-        let line = tmreplace(&line?, replace)?;
-        debug!("Processing line {}: '{}'", index + 1, line);
-        // Action to come depends on line we read
-        match index {
-            0 => {
-                // First line is session name
-                debug!("Possible session name: {}", &line);
-                // Before we got to simple_config(), we already tried
-                // looking for a session with the name the user gave
-                // us as argument. And it did not exist.
-                //
-                // Unlucky us, this first line may NOT be the same as
-                // that session name. So we check again, and if a
-                // session name like this already exists, we error
-                // out. Could, *maybe* attach to that? Unsure. Might
-                // be surprising.
-                if session.exists() {
-                    return Err(anyhow!(
-                        "Session name {} as read from file {:?} matches existing session, not recreating/messing with it.",
-                        line,
-                        sesfile
-                    ));
-                } else {
-                    sesname = session.set_name(&line)?.to_string();
-                    debug!("Calculated session name: {}", sesname);
-                }
-            }
-            1 => trace!("Ignoring 2nd line"),
-            _ => {
-                debug!("Hostname/LIST line");
-                // Third and following lines are either hostnames or
-                // LIST commands, so parse them.
-                hosts.append(&mut parse_line(&line, replace, sesfilepath)?);
-            }
-        }
-    }
-    trace!("Finished parsing session file");
-    // We have a nice set of hosts and a session name, lets set it all up
-    match syncssh(hosts, &sesname) {
-        Ok(val) => {
-            trace!("Session opened ({:#?}), now attaching", val);
-            attach_session!(session);
-            Ok(())
-        }
-        Err(val) => return Err(anyhow!("Could not finish session setup: {}", val)),
-    }
-}
-
 /// main, start it all off
 fn main() -> Result<()> {
     let cli = Cli::parse();
@@ -1269,20 +1338,24 @@ fn main() -> Result<()> {
         session.grouped = true;
     }
 
+    // Store the replacement token
+    session.replace = cli.replace.clone();
+
     // First we check what the tm shell called "getopt-style"
     if cli.ls {
         ls();
     } else if cli.kill.is_some() {
         session.kill();
     } else if cli.session.is_some() {
-        let sespath = Path::join(Path::new(&*TMDIR), Path::new(&sesname));
+        let sespath = Path::join(Path::new(&*TMDIR), Path::new(&cli.session.clone().unwrap()));
         if Path::new(&sespath).exists() {
             trace!(
                 "Should attach session {} or configure session from {:?}",
                 sesname,
                 sespath
             );
-            attach_session!(session, simple_config(&sespath, &cli.replace, &mut session));
+            session.sesfile = sespath;
+            session.read_session_file_and_attach().unwrap();
         } else {
             trace!("Should attach or create session {}", sesname);
             attach_session!(session, {

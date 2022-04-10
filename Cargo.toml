@@ -10,19 +10,20 @@ categories = [ "command-line-utilities" ]
 repository = "https://github.com/Ganneff/tm"
 
 [dependencies]
+anyhow = "^1.0"
 clap = { version = "^3.1.6, ~3.1", features = ["derive", "env", "regex", "unicode", "wrap_help"] }
 clap-verbosity-flag = "^1"
-flexi_logger = { version = "^0.22", features = ["colors"] }
-log = "^0.4"
-tmux_interface = { version = "^0.2.0", features = ["tmux_2_8", "cmd_alias"], default-features = false }
-quit = "^1.1"
 directories = "^4.0"
-thiserror = "^1.0"
+enum_default = "0.2.5"
+flexi_logger = { version = "^0.22", features = ["colors"] }
+home-dir = "^0.1"
 lazy_static = "^1.4"
-anyhow = "^1.0"
+log = "^0.4"
+quit = "^1.1"
 rand = "^0.8"
 shlex = "1.1.0"
-home-dir = "^0.1"
+thiserror = "^1.0"
+tmux_interface = { version = "^0.2.0", features = ["tmux_2_8", "cmd_alias"], default-features = false }
 
 [workspace]
 
