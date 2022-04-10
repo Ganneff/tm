@@ -1139,8 +1139,6 @@ fn main() -> Result<()> {
     Ok(())
 }
 
-// Lets try to test the cmdline interface, so we are halfway sure, we
-// stay as compatible to the old tm as possible
 #[cfg(test)]
 mod tests {
     use super::*;
