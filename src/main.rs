@@ -940,6 +940,26 @@ macro_rules! newtmuxsession {
     };
 }
 
+#[test]
+fn test_kill_and_exists() {
+    let mut session = Session {
+        ..Default::default()
+    };
+    session.set_name("tmtestsession").unwrap();
+    assert_eq!(false, session.exists());
+    TmuxCommand::new()
+        .new_session()
+        .session_name(&session.sesname)
+        .detached()
+        .shell_command("/bin/bash")
+        .output()
+        .unwrap();
+    assert_eq!(true, session.exists());
+    assert_eq!(true, session.kill().unwrap());
+    assert!(session.kill().is_err());
+    assert_eq!(false, session.exists());
+}
+
 // A bunch of "static" variables, though computed at program start, as they
 // depend on the users environment.
 lazy_static! {
