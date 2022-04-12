@@ -182,6 +182,133 @@ enum Commands {
     },
 }
 
+////////////////////////////////////////////////////////////////////////
+// Macros
+////////////////////////////////////////////////////////////////////////
+/// New tmux session, with a shell executing the command given
+///
+/// Parameters:
+/// * `$host` SSH Destination for first window/pane in the new session, will be name of first window/pane
+/// * `$sesname` Session name for tmux
+/// * `$shellcommand` Actual command to execute
+///
+/// # Example
+/// ```
+/// newtmuxsession!("host.example.com", "example", format!("{} {}", *TMSSHCMD, "host.example.com"));
+/// ```
+macro_rules! newtmuxsession {
+    ($host:expr, $sesname:expr, $shellcommand:expr) => {
+        trace!("Open Session to {}", $host);
+        TmuxCommand::new()
+            .new_session()
+            .detached()
+            .session_name($sesname)
+            .window_name($host)
+            .shell_command($shellcommand)
+            .output()?;
+    };
+}
+
+/// Help setting up static variables based on user environment.
+///
+/// We allow the user to configure certain properties/behaviours of tm
+/// using environment variables. To reduce boilerplate in code, we use a
+/// macro for setting them. We use [mod@`lazy_static`] to define them as
+/// global variables, so they are available throughout the whole program -
+/// they aren't going to change during runtime, ever, anyways.
+///
+/// # Examples
+///
+/// ```
+/// # fn main() {
+/// static ref TMPDIR: String = fromenvstatic!(asString "TMPDIR", "/tmp");
+/// static ref TMSORT: bool = fromenvstatic!(asBool "TMSORT", true);
+/// static ref TMWIN: u8 = fromenvstatic!(asU8 "TMWIN", 1);
+/// # }
+/// ```
+macro_rules! fromenvstatic {
+    (asString $envvar:literal, $default:expr) => {
+        match env::var($envvar) {
+            Ok(val) => val,
+            Err(_) => $default.to_string(),
+        }
+    };
+    (asBool $envvar:literal, $default:literal) => {
+        match env::var($envvar) {
+            Ok(val) => FromStr::from_str(&val).unwrap(),
+            Err(_) => $default,
+        }
+    };
+    (asU8 $envvar:literal, $default:literal) => {
+        match env::var($envvar) {
+            Ok(val) => val.parse::<u8>().unwrap(),
+            Err(_) => $default,
+        }
+    };
+}
+
+/// Set an option for a tmux window
+///
+/// tmux windows can have a large set of options attached. We do
+/// regularly want to set some.
+///
+/// # Example
+/// ```
+/// # fn main() {
+/// setwinopt!(sesname, windowindex, "automatic-rename", "off");
+/// # }
+/// ```
+macro_rules! setwinopt {
+    ($sesname:expr, $index:tt, $option: literal, $value:literal) => {
+        let tar = format!("{}:{}", &$sesname, $index);
+        trace!("Setting Window ({}) option {} to {}", tar, $option, $value);
+        match TmuxCommand::new()
+            .set_option()
+            .window()
+            .target(&tar)
+            .option($option)
+            .value($value)
+            .output()
+        {
+            Ok(_) => trace!("Window option successfully set"),
+            Err(error) => {
+                debug!("Error setting window option {}: {:#?}", $option, error);
+            }
+        }
+    };
+}
+
+/// Attach to an existing session
+macro_rules! attach_session {
+    ($session:expr) => {
+        match $session.attach() {
+            Ok(true) => debug!("Successfully attached to {}", $session.sesname),
+            Ok(false) => debug!("Session {} not found, could not attach", $session.sesname),
+            Err(val) => error!("Error: {}", val),
+        }
+    };
+    ($session:expr, $func:expr) => {
+        match $session.attach() {
+            Ok(true) => debug!("Successfully attached to {}", $session.sesname),
+            Ok(false) => {
+                debug!(
+                    "Session {} not found, going to set it up from scratch",
+                    $session.sesname
+                );
+                match $func {
+                    Ok(_) => debug!("Successfully setup new session"),
+                    Err(val) => error!("Error: {}", val),
+                }
+            }
+            Err(val) => {
+                error!("Error: {}", val);
+            }
+        };
+    };
+}
+
+////////////////////////////////////////////////////////////////////////
+
 /// Some additional functions for Cli, to make our life easier
 impl Cli {
     /// Return a session name
@@ -307,6 +434,8 @@ struct Session {
     sesfile: PathBuf,
     /// Type of session (file), from extension of file
     sestype: SessionType,
+    /// Synchronized session? (Synchronized - input goes to all visible panes in tmux at once)
+    synced: bool,
     /// List of SSH Destinations / commands for the session
     targets: Vec<String>,
     /// Token for the string replacement in session files
@@ -482,8 +611,8 @@ impl Session {
 
         // Want to read the session config file
         let sesreader = BufReader::new(File::open(&self.sesfile)?);
-        // Need session name later, default to Unknown, just in case
-        let mut sesname: String = "Unknown".to_owned();
+        // Need session name later
+        let mut sesname: String;
 
         let mut tmwin = *TMWIN;
 
@@ -553,140 +682,146 @@ impl Session {
         match &self.sestype {
             SessionType::Simple => {
                 // We have a nice set of hosts and a session name, lets set it all up
-                match syncssh(self.targets.clone(), &sesname) {
-                    Ok(val) => {
-                        trace!("Session opened ({:#?}), now attaching", val);
-                        self.attach()?;
-                    }
-                    Err(val) => return Err(anyhow!("Could not finish session setup: {}", val)),
-                }
+                self.synced = true;
+                self.setup_simple_session()?;
+                self.attach()?;
             }
             SessionType::Extended => unimplemented!("Not yet"),
         }
         Ok(())
     }
-}
 
-/// Help setting up static variables based on user environment.
-///
-/// We allow the user to configure certain properties/behaviours of tm
-/// using environment variables. To reduce boilerplate in code, we use a
-/// macro for setting them. We use [mod@`lazy_static`] to define them as
-/// global variables, so they are available throughout the whole program -
-/// they aren't going to change during runtime, ever, anyways.
-///
-/// # Examples
-///
-/// ```
-/// # fn main() {
-/// static ref TMPDIR: String = fromenvstatic!(asString "TMPDIR", "/tmp");
-/// static ref TMSORT: bool = fromenvstatic!(asBool "TMSORT", true);
-/// static ref TMWIN: u8 = fromenvstatic!(asU8 "TMWIN", 1);
-/// # }
-/// ```
-macro_rules! fromenvstatic {
-    (asString $envvar:literal, $default:expr) => {
-        match env::var($envvar) {
-            Ok(val) => val,
-            Err(_) => $default.to_string(),
-        }
-    };
-    (asBool $envvar:literal, $default:literal) => {
-        match env::var($envvar) {
-            Ok(val) => FromStr::from_str(&val).unwrap(),
-            Err(_) => $default,
-        }
-    };
-    (asU8 $envvar:literal, $default:literal) => {
-        match env::var($envvar) {
-            Ok(val) => val.parse::<u8>().unwrap(),
-            Err(_) => $default,
-        }
-    };
-}
+    /// Create a simple tmux session, that is, a session with one or
+    /// multiple windows or panes opening SSH connections to a set of
+    /// targets.
+    ///
+    /// Depending on value of session field [Session::synced] it will
+    /// setup multiple windows, or one window with multiple panes.
+    fn setup_simple_session(&mut self) -> Result<bool> {
+        trace!("Entering setup_session");
+        debug!("Creating session {}", self.sesname);
 
-/// Set an option for a tmux window
-///
-/// tmux windows can have a large set of options attached. We do
-/// regularly want to set some.
-///
-/// # Example
-/// ```
-/// # fn main() {
-/// setwinopt!(sesname, windowindex, "automatic-rename", "off");
-/// # }
-/// ```
-macro_rules! setwinopt {
-    ($sesname:expr, $index:tt, $option: literal, $value:literal) => {
-        let tar = format!("{}:{}", &$sesname, $index);
-        trace!("Setting Window ({}) option {} to {}", tar, $option, $value);
-        match TmuxCommand::new()
-            .set_option()
-            .window()
-            .target(&tar)
-            .option($option)
-            .value($value)
-            .output()
-        {
-            Ok(_) => trace!("Window option successfully set"),
-            Err(error) => {
-                debug!("Error setting window option {}: {:#?}", $option, error);
-            }
+        if self.targets.is_empty() {
+            return Err(anyhow!("No targets setup, can not open session"));
         }
-    };
-}
+        newtmuxsession!(
+            &self.targets[0],
+            &self.sesname,
+            format!("{} {}", *TMSSHCMD, &self.targets[0])
+        );
 
-/// Attach to an existing session
-macro_rules! attach_session {
-    ($session:expr) => {
-        match $session.attach() {
-            Ok(true) => debug!("Successfully attached to {}", $session.sesname),
-            Ok(false) => debug!("Session {} not found, could not attach", $session.sesname),
-            Err(val) => error!("Error: {}", val),
-        }
-    };
-    ($session:expr, $func:expr) => {
-        match $session.attach() {
-            Ok(true) => debug!("Successfully attached to {}", $session.sesname),
-            Ok(false) => {
-                debug!(
-                    "Session {} not found, going to set it up from scratch",
-                    $session.sesname
-                );
-                match $func {
-                    Ok(_) => debug!("Successfully setup new session"),
-                    Err(val) => error!("Error: {}", val),
+        // Which window are we at? Start with TMWIN, later on count up (if
+        // we open more than one)
+        let mut wincount = *TMWIN;
+        setwinopt!(self.sesname, wincount, "automatic-rename", "off");
+        setwinopt!(self.sesname, wincount, "allow-rename", "off");
+
+        // Next check if there was more than one host, if so, open windows/panes
+        // for them too.
+        if self.targets.len() >= 2 {
+            debug!("Got more than 1 target");
+            let mut others = self.targets.clone().into_iter();
+            // Skip the first, we already opened a connection
+            others.next();
+            for x in others {
+                // For the syncssh session, we count how often we tried to create a pane
+                let mut count = 1;
+                loop {
+                    debug!(
+                        "Opening window/pane for {}, destination {}",
+                        self.sesname, x
+                    );
+                    match self.synced {
+                        true => {
+                            // split pane
+                            let output = TmuxCommand::new()
+                                .split_window()
+                                .detached()
+                                .target_window(&self.sesname)
+                                .shell_command(format!("{} {}", *TMSSHCMD, &x))
+                                .output()
+                                .unwrap();
+
+                            trace!("New pane: {:?}", output);
+                            if output.0.status.success() {
+                                // Exit the loop, we made it and got the window
+                                debug!("Pane opened successfully");
+                                break;
+                            } else {
+                                // Didn't work, lets help tmux along and then retry this
+                                debug!("split-window did not work");
+                                if count >= 3 {
+                                    return Err(anyhow!("Could not successfully create another pane for {}, tried {} times", x, count));
+                                }
+                                count += 1;
+
+                                let reason: String = String::from_utf8(output.0.stderr)
+                                    .expect("Could not parse tmux fail reason");
+
+                                debug!("Failure reason: {}", reason.trim());
+                                if reason.trim().eq_ignore_ascii_case("no space for new pane") {
+                                    debug!("Panes getting too small, need to adjust layout");
+                                    // No space for new pane -> redo the layout so windows are equally sized again
+                                    let out = TmuxCommand::new()
+                                        .select_layout()
+                                        .layout_name("main-horizontal")
+                                        .output()
+                                        .expect("Could not spread out layout");
+                                    trace!("Layout result: {:#?}", out);
+                                };
+                            };
+                            // And one more round
+                            continue;
+                        }
+                        false => {
+                            // For the plain ssh session, we count the window we are in
+                            wincount += 1;
+                            // new window
+                            TmuxCommand::new()
+                                .new_window()
+                                .detached()
+                                .add()
+                                .window_name(&x)
+                                .target_window(&self.sesname)
+                                .shell_command(format!("{} {}", *TMSSHCMD, &x))
+                                .output()?;
+                            debug!("Window/Pane {} opened", wincount);
+                            setwinopt!(&self.sesname, wincount, "automatic-rename", "off");
+                            setwinopt!(&self.sesname, wincount, "allow-rename", "off");
+                            break;
+                        }
+                    }
                 }
             }
-            Err(val) => {
-                error!("Error: {}", val);
+            match self.synced {
+                true => {
+                    // Now synchronize their input
+                    setwinopt!(self.sesname, wincount, "synchronize-pane", "on");
+                    // And select a final layout that all of them have roughly the same size
+                    if TmuxCommand::new()
+                        .select_layout()
+                        .layout_name("tiled")
+                        .output()
+                        .unwrap()
+                        .0
+                        .status
+                        .success()
+                    {
+                        trace!("synced setup successful");
+                        return Ok(true);
+                    } else {
+                        trace!("synced setup failed");
+                        return Err(anyhow!("Setting layout failed"));
+                    }
+                }
+                false => {
+                    return Ok(true);
+                }
             }
-        };
-    };
-}
+        }
 
-/// New tmux session, with a shell executing the command given
-///
-/// Parameters:
-/// * `$host` SSH Destination for first window/pane in the new session, will be name of first window/pane
-/// * `$sesname` Session name for tmux
-/// * `$shellcommand` Actual command to execute
-///
-/// # Example
-/// ```
-/// newtmuxsession!("host.example.com", "example", format!("{} {}", *TMSSHCMD, "host.example.com"));
-/// ```
-macro_rules! newtmuxsession {
-    ($host:expr, $sesname:expr, $shellcommand:expr) => {
-        trace!("Open Session to {}", $host);
-        TmuxCommand::new()
-            .new_session()
-            .detached()
-            .session_name($sesname)
-            .window_name($host)
-            .shell_command($shellcommand)
-            .output()?;
-    };
+        Ok(true)
+    }
 }
 
 // A bunch of "static" variables, though computed at program start, as they
@@ -764,145 +899,6 @@ fn ls() {
         .to_string();
     println!("{}", sessions);
     trace!("Leaving ls");
-}
-
-/// SSH to multiple hosts, synchronized input (all panes receive the
-/// same keystrokes)
-fn syncssh(hosts: Vec<String>, sesname: &str) -> Result<&str, tmux_interface::Error> {
-    trace!("Entering syncssh");
-    debug!("Hosts to connect to: {:?}", hosts);
-    debug!("Creating session {}", sesname);
-
-    newtmuxsession!(&hosts[0], sesname, format!("{} {}", *TMSSHCMD, &hosts[0]));
-
-    // Which window are we at? Start with TMWIN, later on count up (if
-    // we open more than one)
-    let wincount = *TMWIN;
-    setwinopt!(sesname, wincount, "automatic-rename", "off");
-    setwinopt!(sesname, wincount, "allow-rename", "off");
-
-    // Next check if there was more than one host, if so, open windows
-    // for them too.
-    if hosts.len() >= 2 {
-        debug!("Got more than 1 host, opening more panes with ssh sessions");
-        let mut others = hosts.into_iter();
-        // Skip the first, we already opened a connection
-        others.next();
-        for x in others {
-            let mut count = 1;
-            loop {
-                debug!("New pane for {sesname}, destination {x}");
-                let output = TmuxCommand::new()
-                    .split_window()
-                    .detached()
-                    .target_window(sesname)
-                    .shell_command(format!("{} {}", *TMSSHCMD, &x))
-                    .output()
-                    .unwrap();
-
-                trace!("New pane: {:?}", output);
-                if output.0.status.success() {
-                    // Exit the loop, we made it and got the window
-                    debug!("Pane opened successfully");
-                    break;
-                } else {
-                    // Didn't work, lets help tmux along and then retry this
-                    debug!("split-window did not work");
-                    if count >= 3 {
-                        error!(
-                            "Could not successfully create another pane for {}, tried {} times",
-                            x, count
-                        );
-                        break;
-                    };
-                    count += 1;
-
-                    let reason: String = String::from_utf8(output.0.stderr)
-                        .expect("Could not parse tmux fail reason");
-
-                    debug!("Failure reason: {}", reason.trim());
-                    if reason.trim().eq_ignore_ascii_case("no space for new pane") {
-                        debug!("Panes getting too small, need to adjust layout");
-                        // No space for new pane -> redo the layout so windows are equally sized again
-                        let out = TmuxCommand::new()
-                            .select_layout()
-                            .layout_name("main-horizontal")
-                            .output()
-                            .expect("Could not spread out layout");
-                        trace!("Layout result: {:#?}", out);
-                    };
-                };
-            }
-        }
-    }
-    // Now synchronize their input
-    let firstwin = *TMWIN;
-    setwinopt!(sesname, firstwin, "synchronize-pane", "on");
-    // And select a final layout that all of them have roughly the same size
-    if TmuxCommand::new()
-        .select_layout()
-        .layout_name("tiled")
-        .output()
-        .unwrap()
-        .0
-        .status
-        .success()
-    {
-        trace!("syncssh successful");
-        Ok(sesname)
-    } else {
-        trace!("syncssh failed");
-        Err(tmux_interface::Error::Tmux(
-            "Setting layout failed".to_owned(),
-        ))
-    }
-}
-
-/// SSH to a remote host (or multiple)
-fn ssh(hosts: Vec<String>, sesname: &str) -> Result<&str, tmux_interface::Error> {
-    trace!("Entering ssh");
-    debug!("Creating session {}", sesname);
-    debug!("Hosts to connect to: {:?}", hosts);
-
-    newtmuxsession!(&hosts[0], sesname, format!("{} {}", *TMSSHCMD, &hosts[0]));
-    // Which window are we at? Start with TMWIN, later on count up (if
-    // we open more than one)
-    let mut wincount = *TMWIN;
-    setwinopt!(sesname, wincount, "automatic-rename", "off");
-    setwinopt!(sesname, wincount, "allow-rename", "off");
-
-    // Next check if there was more than one host, if so, open windows
-    // for them too.
-    if hosts.len() >= 2 {
-        debug!("Got more than 1 host, opening more windows/ssh sessions");
-        let mut others = hosts.into_iter();
-        // Skip the first, we already had it
-        others.next();
-        for x in others {
-            wincount += 1;
-            debug!("Opening window for {}", &x);
-            match TmuxCommand::new()
-                .new_window()
-                .detached()
-                .add()
-                .window_name(&x)
-                .target_window(sesname)
-                .shell_command(format!("{} {}", *TMSSHCMD, &x))
-                .output()
-            {
-                Ok(_) => {
-                    debug!("Window/Pane {} opened", wincount);
-                    setwinopt!(sesname, wincount, "automatic-rename", "off");
-                    setwinopt!(sesname, wincount, "allow-rename", "off");
-                }
-                Err(output) => {
-                    return Err(output);
-                }
-            }
-        }
-    }
-    trace!("Leaving ssh");
-    Ok(sesname)
 }
 
 /// Tiny helper to replace the magic ++TMREPLACETM++
@@ -1067,12 +1063,10 @@ fn main() -> Result<()> {
         if session.exists() {
             attach_session!(&mut session);
         } else {
-            match ssh(cli.get_hosts()?, &sesname) {
-                Ok(val) => {
-                    trace!("Session opened ({:#?}), now attaching", val);
-                    attach_session!(&mut session);
-                }
-                Err(val) => error!("Could not finish session setup: {}", val),
+            session.synced = false;
+            session.targets = cli.get_hosts()?;
+            if session.setup_simple_session()? {
+                attach_session!(&mut session);
             }
         }
     } else if cli.multihosts != None {
@@ -1080,12 +1074,10 @@ fn main() -> Result<()> {
         if session.exists() {
             attach_session!(&mut session);
         } else {
-            match syncssh(cli.get_hosts()?, &sesname) {
-                Ok(val) => {
-                    trace!("Session opened ({:#?}), now attaching", val);
-                    attach_session!(&mut session);
-                }
-                Err(val) => error!("Could not finish session setup: {}", val),
+            session.synced = true;
+            session.targets = cli.get_hosts()?;
+            if session.setup_simple_session()? {
+                attach_session!(&mut session);
             }
         }
     };
@@ -1106,13 +1098,10 @@ fn main() -> Result<()> {
                 if session.exists() {
                     attach_session!(&mut session);
                 } else {
-                    match ssh(cli.get_hosts()?, &sesname) {
-                        Ok(val) => {
-                            trace!("Session opened ({:#?}), now attaching", val);
-                            attach_session!(&mut session);
-                        }
-                        Err(val) => error!("Could not finish session setup: {}", val),
-                    }
+                    session.synced = false;
+                    session.targets = cli.get_hosts()?;
+                    session.setup_simple_session()?;
+                    attach_session!(&mut session);
                 }
             }
             Commands::Ms { hosts: _ } => {
@@ -1120,13 +1109,10 @@ fn main() -> Result<()> {
                 if session.exists() {
                     attach_session!(&mut session);
                 } else {
-                    match syncssh(cli.get_hosts()?, &sesname) {
-                        Ok(val) => {
-                            trace!("Session opened ({:#?}), now attaching", val);
-                            attach_session!(&mut session);
-                        }
-                        Err(val) => error!("Could not finish session setup: {}", val),
-                    }
+                    session.synced = true;
+                    session.targets = cli.get_hosts()?;
+                    session.setup_simple_session()?;
+                    attach_session!(&mut session);
                 }
             }
             Commands::K { sesname } => {
