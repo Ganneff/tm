@@ -185,30 +185,6 @@ enum Commands {
 ////////////////////////////////////////////////////////////////////////
 // Macros
 ////////////////////////////////////////////////////////////////////////
-/// New tmux session, with a shell executing the command given
-///
-/// Parameters:
-/// * `$host` SSH Destination for first window/pane in the new session, will be name of first window/pane
-/// * `$sesname` Session name for tmux
-/// * `$shellcommand` Actual command to execute
-///
-/// # Example
-/// ```
-/// newtmuxsession!("host.example.com", "example", format!("{} {}", *TMSSHCMD, "host.example.com"));
-/// ```
-macro_rules! newtmuxsession {
-    ($host:expr, $sesname:expr, $shellcommand:expr) => {
-        trace!("Open Session to {}", $host);
-        TmuxCommand::new()
-            .new_session()
-            .detached()
-            .session_name($sesname)
-            .window_name($host)
-            .shell_command($shellcommand)
-            .output()?;
-    };
-}
-
 /// Help setting up static variables based on user environment.
 ///
 /// We allow the user to configure certain properties/behaviours of tm
@@ -704,11 +680,13 @@ impl Session {
         if self.targets.is_empty() {
             return Err(anyhow!("No targets setup, can not open session"));
         }
-        newtmuxsession!(
-            &self.targets[0],
-            &self.sesname,
-            format!("{} {}", *TMSSHCMD, &self.targets[0])
-        );
+        TmuxCommand::new()
+            .new_session()
+            .detached()
+            .session_name(&self.sesname)
+            .window_name(&self.targets[0])
+            .shell_command(format!("{} {}", *TMSSHCMD, &self.targets[0]))
+            .output()?;
 
         // Which window are we at? Start with TMWIN, later on count up (if
         // we open more than one)
