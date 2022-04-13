@@ -199,7 +199,7 @@ enum Commands {
 /// # fn main() {
 /// static ref TMPDIR: String = fromenvstatic!(asString "TMPDIR", "/tmp");
 /// static ref TMSORT: bool = fromenvstatic!(asBool "TMSORT", true);
-/// static ref TMWIN: u8 = fromenvstatic!(asU8 "TMWIN", 1);
+/// static ref TMWIN: u8 = fromenvstatic!(asU32 "TMWIN", 1);
 /// # }
 /// ```
 macro_rules! fromenvstatic {
@@ -215,41 +215,10 @@ macro_rules! fromenvstatic {
             Err(_) => $default,
         }
     };
-    (asU8 $envvar:literal, $default:literal) => {
+    (asU32 $envvar:literal, $default:literal) => {
         match env::var($envvar) {
-            Ok(val) => val.parse::<u8>().unwrap(),
+            Ok(val) => val.parse::<u32>().unwrap(),
             Err(_) => $default,
-        }
-    };
-}
-
-/// Set an option for a tmux window
-///
-/// tmux windows can have a large set of options attached. We do
-/// regularly want to set some.
-///
-/// # Example
-/// ```
-/// # fn main() {
-/// setwinopt!(sesname, windowindex, "automatic-rename", "off");
-/// # }
-/// ```
-macro_rules! setwinopt {
-    ($sesname:expr, $index:tt, $option: literal, $value:literal) => {
-        let tar = format!("{}:{}", &$sesname, $index);
-        trace!("Setting Window ({}) option {} to {}", tar, $option, $value);
-        match TmuxCommand::new()
-            .set_option()
-            .window()
-            .target(&tar)
-            .option($option)
-            .value($value)
-            .output()
-        {
-            Ok(_) => trace!("Window option successfully set"),
-            Err(error) => {
-                debug!("Error setting window option {}: {:#?}", $option, error);
-            }
         }
     };
 }
@@ -662,8 +631,8 @@ impl Session {
         // Which window are we at? Start with TMWIN, later on count up (if
         // we open more than one)
         let mut wincount = *TMWIN;
-        setwinopt!(self.sesname, wincount, "automatic-rename", "off");
-        setwinopt!(self.sesname, wincount, "allow-rename", "off");
+        self.setwinopt(wincount, "automatic-rename", "off")?;
+        self.setwinopt(wincount, "allow-rename", "off")?;
 
         // Next check if there was more than one host, if so, open windows/panes
         // for them too.
@@ -735,8 +704,8 @@ impl Session {
                                 .shell_command(format!("{} {}", *TMSSHCMD, &x))
                                 .output()?;
                             debug!("Window/Pane {} opened", wincount);
-                            setwinopt!(&self.sesname, wincount, "automatic-rename", "off");
-                            setwinopt!(&self.sesname, wincount, "allow-rename", "off");
+                            self.setwinopt(wincount, "automatic-rename", "off")?;
+                            self.setwinopt(wincount, "allow-rename", "off")?;
                             break;
                         }
                     }
@@ -745,7 +714,7 @@ impl Session {
             match self.synced {
                 true => {
                     // Now synchronize their input
-                    setwinopt!(self.sesname, wincount, "synchronize-pane", "on");
+                    self.setwinopt(wincount, "synchronize-pane", "on")?;
                     // And select a final layout that all of them have roughly the same size
                     if TmuxCommand::new()
                         .select_layout()
@@ -768,8 +737,44 @@ impl Session {
                 }
             }
         }
-
         Ok(true)
+    }
+
+    /// Set an option for a tmux window
+    ///
+    /// tmux windows can have a large set of options attached. We do
+    /// regularly want to set some.
+    ///
+    /// # Example
+    /// ```
+    /// # fn main() {
+    /// session.setwinopt(windowindex, "automatic-rename", "off");
+    /// # }
+    /// ```
+    fn setwinopt(&mut self, index: u32, option: &str, value: &str) -> Result<bool> {
+        trace!("setwinopt");
+        let target = format!("{}:{}", self.sesname, index);
+        debug!("Setting Window ({}) option {} to {}", target, option, value);
+        match TmuxCommand::new()
+            .set_option()
+            .window()
+            .target(&target)
+            .option(option)
+            .value(value)
+            .output()
+        {
+            Ok(_) => {
+                debug!("Window option successfully set");
+                Ok(true)
+            }
+            Err(error) => {
+                return Err(anyhow!(
+                    "Could not set window option {}: {:#?}",
+                    option,
+                    error
+                ))
+            }
+        }
     }
 }
 
@@ -823,7 +828,7 @@ lazy_static! {
     /// 1.
     // FIXME: This depends on a running tmux daemon. None running -> data fetching
     // fails. Could fix to detect that and start one first, later killing that.
-    static ref TMWIN: u8 = match TmuxCommand::new()
+    static ref TMWIN: u32 = match TmuxCommand::new()
         .show_options()
         .global()
         .quiet()
@@ -832,7 +837,7 @@ lazy_static! {
         .output()
     {
         Ok(v) => v.to_string().trim().parse().unwrap_or(1),
-        Err(_) => fromenvstatic!(asU8 "TMWIN", 1),
+        Err(_) => fromenvstatic!(asU32 "TMWIN", 1),
     };
 }
 
