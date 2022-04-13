@@ -254,35 +254,6 @@ macro_rules! setwinopt {
     };
 }
 
-/// Attach to an existing session
-macro_rules! attach_session {
-    ($session:expr) => {
-        match $session.attach() {
-            Ok(true) => debug!("Successfully attached to {}", $session.sesname),
-            Ok(false) => debug!("Session {} not found, could not attach", $session.sesname),
-            Err(val) => error!("Error: {}", val),
-        }
-    };
-    ($session:expr, $func:expr) => {
-        match $session.attach() {
-            Ok(true) => debug!("Successfully attached to {}", $session.sesname),
-            Ok(false) => {
-                debug!(
-                    "Session {} not found, going to set it up from scratch",
-                    $session.sesname
-                );
-                match $func {
-                    Ok(_) => debug!("Successfully setup new session"),
-                    Err(val) => error!("Error: {}", val),
-                }
-            }
-            Err(val) => {
-                error!("Error: {}", val);
-            }
-        };
-    };
-}
-
 ////////////////////////////////////////////////////////////////////////
 
 /// Some additional functions for Cli, to make our life easier
@@ -1029,33 +1000,38 @@ fn main() -> Result<()> {
             session.read_session_file_and_attach().unwrap();
         } else {
             trace!("Should attach or create session {}", sesname);
-            attach_session!(session, {
-                TmuxCommand::new()
-                    .new_session()
-                    .session_name(&session.sesname)
-                    .output()
-            });
+            match session.attach() {
+                Ok(true) => debug!("Successfully attached"),
+                Ok(false) => {
+                    debug!("Session not found, creating new one");
+                    TmuxCommand::new()
+                        .new_session()
+                        .session_name(&session.sesname)
+                        .output()?;
+                }
+                Err(val) => error!("Error: {val}"),
+            }
         };
     } else if cli.sshhosts != None {
         trace!("ssh called");
         if session.exists() {
-            attach_session!(&mut session);
+            session.attach()?;
         } else {
             session.synced = false;
             session.targets = cli.get_hosts()?;
             if session.setup_simple_session()? {
-                attach_session!(&mut session);
+                session.attach()?;
             }
         }
     } else if cli.multihosts != None {
         trace!("ms called");
         if session.exists() {
-            attach_session!(&mut session);
+            session.attach()?;
         } else {
             session.synced = true;
             session.targets = cli.get_hosts()?;
             if session.setup_simple_session()? {
-                attach_session!(&mut session);
+                session.attach()?;
             }
         }
     };
@@ -1074,23 +1050,23 @@ fn main() -> Result<()> {
             Commands::S { hosts: _ } => {
                 trace!("ssh subcommand called");
                 if session.exists() {
-                    attach_session!(&mut session);
+                    session.attach()?;
                 } else {
                     session.synced = false;
                     session.targets = cli.get_hosts()?;
                     session.setup_simple_session()?;
-                    attach_session!(&mut session);
+                    session.attach()?;
                 }
             }
             Commands::Ms { hosts: _ } => {
                 trace!("ms subcommand called");
                 if session.exists() {
-                    attach_session!(&mut session);
+                    session.attach()?;
                 } else {
                     session.synced = true;
                     session.targets = cli.get_hosts()?;
                     session.setup_simple_session()?;
-                    attach_session!(&mut session);
+                    session.attach()?;
                 }
             }
             Commands::K { sesname } => {
