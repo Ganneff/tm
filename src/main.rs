@@ -1064,7 +1064,7 @@ fn main() -> Result<()> {
                 sespath
             );
             session.sesfile = sespath;
-            session.read_session_file_and_attach().unwrap();
+            session.read_session_file_and_attach()?;
         } else {
             trace!("Should attach or create session {}", sesname);
             match session.attach() {
@@ -1079,23 +1079,18 @@ fn main() -> Result<()> {
                 Err(val) => error!("Error: {val}"),
             }
         };
-    } else if cli.sshhosts != None {
-        trace!("ssh called");
+    } else if cli.sshhosts != None || cli.multihosts != None {
+        trace!("Session connecting somewhere");
         if session.exists() {
             session.attach()?;
         } else {
-            session.synced = false;
-            session.targets = cli.get_hosts()?;
-            if session.setup_simple_session()? {
-                session.attach()?;
+            if cli.sshhosts != None {
+                // sshhosts -> Multiple windows, not synced input
+                session.synced = false;
+            } else {
+                // not sshhost, aka multihosts -> One window, many panes, synced input
+                session.synced = true;
             }
-        }
-    } else if cli.multihosts != None {
-        trace!("ms called");
-        if session.exists() {
-            session.attach()?;
-        } else {
-            session.synced = true;
             session.targets = cli.get_hosts()?;
             if session.setup_simple_session()? {
                 session.attach()?;
