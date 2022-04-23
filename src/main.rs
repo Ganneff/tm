@@ -631,9 +631,36 @@ impl Session {
                 self.setup_simple_session()?;
                 self.attach()?;
             }
-            SessionType::Extended => unimplemented!("Not yet"),
+            SessionType::Extended => {
+                self.setup_extended_session()?;
+                self.attach()?;
+            }
         }
         Ok(())
+    }
+
+    /// Create a tmux session from an "extended" config.
+    ///
+    /// This just goes over all entries in [Session::targets] and executes
+    /// them using tmux run-shell ability. Whatever the user setup in
+    /// .cfg is executed - provided that tmux(1) knows it, ie. it is a
+    /// valid tmux command.
+    fn setup_extended_session(&mut self) -> Result<bool> {
+        trace!("Entering setup_extended_session");
+        debug!("Creating session {}", self.sesname);
+
+        if self.targets.is_empty() {
+            return Err(anyhow!("No targets setup, can not open session"));
+        }
+
+        for mut x in self.targets.clone() {
+            debug!("Command: {}", x);
+            x.insert_str(0, "tmux ");
+            trace!("Actually running: {}", x);
+            let output = TmuxCommand::new().run_shell().shell_command(&x).output()?;
+            trace!("Shell: {:?}", output);
+        }
+        Ok(true)
     }
 
     /// Create a simple tmux session, that is, a session with one or
