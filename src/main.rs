@@ -36,7 +36,7 @@ use std::{
     env,
     ffi::{OsStr, OsString},
     fs::File,
-    io::{BufRead, BufReader},
+    io::{self, BufRead, BufReader, BufWriter, Write},
     path::{Path, PathBuf},
     process::Command,
     str::FromStr,
@@ -900,15 +900,16 @@ lazy_static! {
 /// Run ls
 ///
 /// Simply runs `tmux list-sessions`
-fn ls() {
+fn ls<W: Write>(handle: &mut BufWriter<W>) -> Result<()> {
     trace!("Entering ls");
     let sessions = TmuxCommand::new()
         .list_sessions()
         .output()
         .unwrap()
         .to_string();
-    println!("{}", sessions);
+    writeln!(handle, "{sessions}")?;
     trace!("Leaving ls");
+    Ok(())
 }
 
 /// Tiny helper to replace the magic ++TMREPLACETM++
@@ -1048,7 +1049,10 @@ fn main() -> Result<()> {
 
     // First we check what the tm shell called "getopt-style"
     if cli.ls {
-        ls();
+        let stdout = io::stdout();
+        let mut handle = BufWriter::new(stdout.lock());
+        ls(&mut handle)?;
+        handle.flush()?;
     } else if cli.kill.is_some() {
         session.kill()?;
     } else if cli.session.is_some() {
@@ -1109,7 +1113,12 @@ fn main() -> Result<()> {
     // the code.
     if cli.command != None {
         match &cli.command.as_ref().unwrap() {
-            Commands::Ls {} => ls(),
+            Commands::Ls {} => {
+                let stdout = io::stdout();
+                let mut handle = BufWriter::new(stdout.lock());
+                ls(&mut handle)?;
+                handle.flush()?;
+            }
             Commands::S { hosts: _ } => {
                 trace!("ssh subcommand called");
                 if session.exists() {
@@ -1393,7 +1402,7 @@ mod tests {
     }
 
     #[test]
-    fn test_kill_and_exists() {
+    fn test_kill_ls_and_exists() {
         let mut session = Session {
             ..Default::default()
         };
@@ -1407,9 +1416,23 @@ mod tests {
             .output()
             .unwrap();
         assert_eq!(true, session.exists());
+
+        // We want to check the output of ls contains our session from
+        // above, so have it "write" it to a variable, then check if
+        // the variable contains the session name.
+        let lstext = Vec::new();
+        let mut handle = BufWriter::new(lstext);
+        ls(&mut handle).unwrap();
+        handle.flush().unwrap();
+
         assert_eq!(true, session.kill().unwrap());
         assert!(session.kill().is_err());
         assert_eq!(false, session.exists());
+
+        // And now check what got "written" into the variable
+        let (recovered_writer, _buffered_data) = handle.into_parts();
+        let output = String::from_utf8(recovered_writer).unwrap();
+        assert_eq!(output.contains(&session.sesname), true);
     }
 
     #[test]
