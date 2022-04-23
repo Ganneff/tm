@@ -1010,6 +1010,8 @@ fn parse_line(line: &str, replace: &Option<String>, current_dir: &Path) -> Resul
     }
 }
 
+// Can't sensibly test main()
+#[cfg(not(tarpaulin_include))]
 /// main, start it all off
 fn main() -> Result<()> {
     let cli = Cli::parse();
