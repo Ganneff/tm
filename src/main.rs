@@ -643,7 +643,7 @@ impl Session {
     /// Depending on value of session field [Session::synced] it will
     /// setup multiple windows, or one window with multiple panes.
     fn setup_simple_session(&mut self) -> Result<bool> {
-        trace!("Entering setup_session");
+        trace!("Entering setup_simple_session");
         debug!("Creating session {}", self.sesname);
 
         if self.targets.is_empty() {
