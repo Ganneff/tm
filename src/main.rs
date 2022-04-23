@@ -481,9 +481,24 @@ impl Session {
     /// can build a loop and then watch tm race to a panic..
     ///
     /// ## Extended
-    /// FIXME: Need to write some text
+    /// The _extended_ config style is also line based, with the following properties:
     ///
-    /// # Example
+    /// 1. Session name
+    /// 1. Extra tmux command line options, most commonly **NONE**. _(currently options are unsupported in the rust tm version)_
+    /// 1. Any tmux(1) command with whatever option tmux supports.
+    /// 1. [...] As many tmux(1) commands as wanted and needed
+    ///
+    /// ### Replacement tags
+    /// While parsing the commands, the following tags get replaced:
+    ///
+    /// | TAG     | Replacement
+    /// |---------|------------
+    /// | SESSION | Session name (first line value)
+    /// | TMWIN   | Current window (starts with whatever tmux option base-index has, increases on every new-window found)
+    /// | $HOME   | User home directory
+    /// | ${HOME} | Same as $HOME
+    ///
+    /// # Examples
     /// The following will open a tmux session named `examplesession`, connection to two hosts.
     /// ```
     /// examplesession
@@ -496,11 +511,25 @@ impl Session {
     /// connecting to at least one host, but possibly more, depending on
     /// how many lines of SSH destinations the `cat foo.list` command will
     /// print to stdout.
-    /// ```
+    /// ```text
     /// anotherexample
     /// NONE
     /// ganneff@host3
     /// LIST cat foo.list
+    /// ```
+    ///
+    /// The following will open a tmux session `logmon`, with a window
+    /// split in 3 panes, one tail-ing the messages log, another
+    /// showing current date/time and a third showing htop. It will
+    /// forbid tmux to rename the window.
+    /// ```text
+    /// nagioscfg
+    /// NONE
+    /// new-session -d -s SESSION -n SESSION ssh -t localhost 'TERM=xterm tail -f /var/log/messages'
+    /// split-window -h -p 50 -d -t SESSION:TMWIN ssh -t localhost  'watch -n1 -d date -u'
+    /// split-window -v -p 70 -d -t SESSION:TMWIN ssh -t localhost  'TERM=xterm htop'
+    /// set-window-option -t SESSION:TMWIN automatic-rename off
+    /// set-window-option -t SESSION:TMWIN allow-rename off
     /// ```
     fn read_session_file_and_attach(&mut self) -> Result<()> {
         trace!("Entering read_session_file");
