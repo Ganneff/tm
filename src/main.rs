@@ -580,14 +580,12 @@ impl Session {
                     // session name like this already exists, we error
                     // out. Could, *maybe* attach to that? Unsure. Might
                     // be surprising.
+                    sesname = self.set_name(&line)?.to_string();
                     if self.exists() {
-                        return Err(anyhow!(
-                        "Session name {} as read from file {:?} matches existing session, not recreating/messing with it.",
-                        line,
-                        self.sesfile
-                    ));
+                        info!("Session matches existing one, attaching");
+                        self.attach()?;
+                        return Ok(());
                     } else {
-                        sesname = self.set_name(&line)?.to_string();
                         debug!("Calculated session name: {}", sesname);
                     }
                 }
