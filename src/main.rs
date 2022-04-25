@@ -1153,15 +1153,9 @@ mod tests {
         let mut session = Session {
             ..Default::default()
         };
-        // No option
-        let mut cli = Cli::parse_from("tm".split_whitespace());
-        assert_eq!(
-            cli.find_session_name(&mut session).unwrap(),
-            "Unhandled_command_so_unknown_session_name".to_string(),
-        );
 
         // Just a session
-        cli = Cli::parse_from("tm foo".split_whitespace());
+        let mut cli = Cli::parse_from("tm foo".split_whitespace());
         assert_eq!(
             cli.find_session_name(&mut session).unwrap(),
             "foo".to_string()
@@ -1283,6 +1277,7 @@ mod tests {
             "ms_morehost_testhosts".to_string()
         );
     }
+
     #[test]
     #[allow(clippy::bool_assert_comparison)]
     fn test_cmdline_ls() {
