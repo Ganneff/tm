@@ -121,10 +121,6 @@ struct Cli {
     #[clap(short = 'e', display_order = 45)]
     exist: Option<String>,
 
-    /// Value to use for replacing in session files (see their help)
-    #[clap(short = 'r', display_order = 50)]
-    replace: Option<String>,
-
     #[clap(flatten)]
     verbose: clap_verbosity_flag::Verbosity,
 
@@ -133,8 +129,12 @@ struct Cli {
     /// If this exists as a tmux session, it behaves like `tmux
     /// attach`. Otherwise it checks TMDIR for existance of a config
     /// file and will open a session as specified in there.
-    #[clap(display_order = 55)]
+    #[clap(display_order = 50)]
     session: Option<String>,
+
+    /// Value to use for replacing in session files (see their help)
+    #[clap(display_order = 55)]
+    replace: Option<String>,
 }
 
 #[derive(Subcommand, Debug, PartialEq)]
