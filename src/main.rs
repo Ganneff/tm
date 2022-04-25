@@ -48,7 +48,7 @@ use tmux_interface::TmuxCommand;
 #[clap(propagate_version = true)]
 #[clap(arg_required_else_help = true)]
 #[clap(dont_collapse_args_in_usage = true)]
-/// Options for tm, they are closely resembling (ought to be compatible) to the ones from the old shell script.
+/// Options for tm, they are closely resembling (ought to be compatible to) the ones from the old shell script.
 struct Cli {
     /// subcommands
     #[clap(subcommand)]
@@ -81,7 +81,7 @@ struct Cli {
     /// The same details for the arguments as for [Cli::sshhosts] applies.
     ///
     /// When multiple destinations are specified, they are all opened
-    /// into one single tmux window and many panes in there.
+    /// into one single tmux window with many panes in there.
     /// Additionally, the "synchronize-input" option is turned on, so
     /// that anything entered will be send to every host.
     #[clap(
@@ -95,8 +95,8 @@ struct Cli {
     /// Open as second session to the same set of hosts as an existing
     /// one, instead of attaching to the existing
     ///
-    /// This way more than one session to the same set can be opened
-    /// and used.
+    /// This way more than one session to the same set of ssh
+    /// destinations can be opened and used.
     #[clap(short = 'n', display_order = 25)]
     second: bool,
 
@@ -104,10 +104,10 @@ struct Cli {
     /// seperate window config
     ///
     /// This will show the same set of windows, but allow different
-    /// handling of the session according to client. This one client
-    /// could display the first, another the second window. Without
-    /// this option, a second client would always show the same
-    /// content as the first.
+    /// handling of the session according to client. This way one
+    /// client could display the first, another the second window.
+    /// Without this option, a second client would always show the
+    /// same content as the first.
     #[clap(short = 'g', display_order = 30)]
     group: bool,
 
@@ -115,7 +115,7 @@ struct Cli {
     #[clap(short = 'k', display_order = 35)]
     kill: Option<String>,
 
-    /// Setup session according to file in TMDIR
+    /// Setup session according to config file in TMDIR
     #[clap(short = 'c', display_order = 40)]
     config: Option<String>,
 
