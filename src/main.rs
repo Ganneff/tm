@@ -119,10 +119,6 @@ struct Cli {
     #[clap(short = 'c', display_order = 40)]
     config: Option<String>,
 
-    /// Use existing session SESSION
-    #[clap(short = 'e', display_order = 45)]
-    exist: Option<String>,
-
     #[clap(flatten)]
     verbose: clap_verbosity_flag::Verbosity,
 
