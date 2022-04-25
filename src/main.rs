@@ -46,6 +46,8 @@ use tmux_interface::TmuxCommand;
 #[derive(Debug, Parser)]
 #[clap(author, version, about)]
 #[clap(propagate_version = true)]
+#[clap(arg_required_else_help = true)]
+#[clap(dont_collapse_args_in_usage = true)]
 /// Options for tm, they are closely resembling (ought to be compatible) to the ones from the old shell script.
 struct Cli {
     /// subcommands
