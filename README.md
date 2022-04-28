@@ -40,7 +40,7 @@ Need to adapt docs from the old [README.org](old/README.org) to here.
 - [X] Simple config files (no ending)
   - [X] Allows LIST command, recursively
   - [X] Support ++TMREPLACETM++
-- [ ] Extended config files (.cfg ending)
+- [X] Extended config files (.cfg ending)
 
 # Installation
 ## How to build
