@@ -706,6 +706,7 @@ impl Session {
                             // split pane
                             let output = TmuxCommand::new()
                                 .split_window()
+                                .size(&tmux_interface::commands::PaneSize::Percentage(1))
                                 .detached()
                                 .target_window(&self.sesname)
                                 .shell_command(format!("{} {}", *TMSSHCMD, &x))
