@@ -178,6 +178,22 @@ enum Commands {
         #[clap(required = true)]
         sesname: String,
     },
+
+    /// Break a multi-session pane into single windows
+    #[clap(display_order = 30)]
+    B {
+        /// Sessiion name for which to break panes into windows
+        #[clap(required = true)]
+        sesname: String,
+    },
+
+    /// Join multiple windows into one single one with many panes
+    #[clap(display_order = 35)]
+    J {
+        /// Sessiion name for which to join windows into panes
+        #[clap(required = true)]
+        sesname: String,
+    },
 }
 
 ////////////////////////////////////////////////////////////////////////
@@ -279,7 +295,9 @@ impl Cli {
                     Commands::S { hosts: _ } | Commands::Ms { hosts: _ } => {
                         self.session_name_from_hosts()?
                     }
-                    Commands::K { sesname } => sesname.to_string(),
+                    Commands::K { sesname } | Commands::B { sesname } | Commands::J { sesname } => {
+                        sesname.to_string()
+                    }
                     &_ => "Unknown".to_string(),
                 }
             } else {
@@ -829,6 +847,53 @@ impl Session {
             }
         }
     }
+
+    /// Break a session with many panes in one window into one with
+    /// many windows.
+    fn break_panes(&mut self) -> Result<bool> {
+        let windowlist: Vec<u8> = String::from_utf8(
+            TmuxCommand::new()
+                .list_windows()
+                .format("#{window_index}")
+                .target_session(&self.sesname)
+                .output()?
+                .stdout(),
+        )?
+        .split_terminator('\n')
+        .map(|l| l.parse::<u8>().unwrap_or(8))
+        .collect();
+        debug!("Windows: {:#?}", windowlist);
+
+        // for win in windowlist {
+        // }
+        let panes: Vec<(&str, &str)> = String::from_utf8(
+            TmuxCommand::new()
+                .list_panes()
+                .format("#{s/ssh //:pane_start_command} #{pane_id}")
+                .session()
+                .target(&self.sesname)
+                .output()?
+                .stdout(),
+        )?
+        .split_terminator('\n')
+        .map(|pane| {
+            let mut f = pane.to_string().split_whitespace();
+            (f.next().unwrap(), f.next().unwrap())
+        })
+        // .map(|l| (l.to_string().split_whitespace(); l.next(), l.next();
+        //       unzip()))
+        .collect();
+        debug!("Panes: {:#?}", panes);
+
+        unimplemented!("To be written!");
+        Ok(true)
+    }
+
+    /// Join a session with many windows in one window with many panes.
+    fn join_panes(&mut self) -> Result<bool> {
+        unimplemented!("To be written!");
+        Ok(true)
+    }
 }
 
 // A bunch of "static" variables, though computed at program start, as they
@@ -1136,6 +1201,14 @@ fn main() -> Result<()> {
             Commands::K { sesname } => {
                 trace!("k subcommand called, killing {sesname}");
                 session.kill()?;
+            }
+            Commands::B { sesname } => {
+                trace!("b subcommand called, breaking panes into windows for {sesname}");
+                session.break_panes()?;
+            }
+            Commands::J { sesname } => {
+                trace!("j subcommand called, joining windows into panes for {sesname}");
+                session.join_panes()?;
             }
         }
     }
