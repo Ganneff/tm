@@ -892,10 +892,91 @@ impl Session {
         Ok(true)
     }
 
-    /// Join a session with many windows in one window with many panes.
-    fn join_panes(&mut self) -> Result<bool> {
-        unimplemented!("To be written!");
-        Ok(true)
+    /// Join many windows into one window with many panes
+    fn join_windows(&mut self) -> Result<bool> {
+        let windowlist: Vec<String> = String::from_utf8(
+            TmuxCommand::new()
+                .list_windows()
+                .format("#{window_id}")
+                .target_session(&self.sesname)
+                .output()?
+                .stdout(),
+        )?
+        .split_terminator('\n')
+        .map(|s| s.to_string())
+        .collect();
+        debug!("Window IDs: {:#?}", windowlist);
+        let first = windowlist.clone().into_iter().next().unwrap();
+        debug!("First: {first:#?}");
+        for id in windowlist {
+            if id != first {
+                let mut count = 1;
+                loop {
+                    trace!("Joining {} to {}", &id, &first);
+                    let output = TmuxCommand::new()
+                        .join_pane()
+                        .detached()
+                        .src_pane(&id)
+                        .dst_pane(format!("{}:{}", self.sesname, first))
+                        .output()?;
+                    trace!("Output: {:?}", output);
+                    if output.0.status.success() {
+                        // Exit the loop, we made it and got the window joined as a pane
+                        debug!("Window {} joined successfully", &id);
+                        break;
+                    } else {
+                        // Didn't work, lets help tmux along and then retry this
+                        debug!("join-pane did not work");
+                        if count >= 3 {
+                            return Err(anyhow!(
+                                "Could not successfully join window {} into {}, tried {} times",
+                                id,
+                                first,
+                                count
+                            ));
+                        }
+                        count += 1;
+
+                        let reason: String = String::from_utf8(output.0.stderr)
+                            .expect("Could not parse tmux fail reason");
+
+                        debug!("Failure reason: {}", reason.trim());
+                        if reason
+                            .trim()
+                            .eq_ignore_ascii_case("create pane failed: pane too small")
+                        {
+                            debug!("Panes getting too small, need to adjust layout");
+                            // No space for new pane -> redo the layout so windows are equally sized again
+                            let out = TmuxCommand::new()
+                                .select_layout()
+                                .target_pane(&first)
+                                .layout_name("main-horizontal")
+                                .output()
+                                .expect("Could not spread out layout");
+                            trace!("Layout result: {:?}", out);
+                        };
+                    };
+                    // And one more round
+                    continue;
+                }
+            }
+        }
+        if TmuxCommand::new()
+            .select_layout()
+            .layout_name("tiled")
+            .output()
+            .unwrap()
+            .0
+            .status
+            .success()
+        {
+            trace!("joining windows successful");
+            self.setwinopt(*TMWIN, "synchronize-pane", "on")?;
+            Ok(true)
+        } else {
+            trace!("joining windows failed");
+            return Err(anyhow!("Setting layout failed"));
+        }
     }
 }
 
@@ -1216,7 +1297,7 @@ fn main() -> Result<()> {
             }
             Commands::J { sesname } => {
                 trace!("j subcommand called, joining windows into panes for {sesname}");
-                session.join_panes()?;
+                session.join_windows()?;
             }
         }
     }
