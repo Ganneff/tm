@@ -17,6 +17,7 @@ directories = "^4.0"
 enum_default = "0.2.5"
 flexi_logger = { version = "^0.22", features = ["colors"] }
 home-dir = "^0.1"
+itertools = "0.10.3"
 lazy_static = "^1.4"
 log = "^0.4"
 quit = "^1.1"

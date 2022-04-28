@@ -29,6 +29,7 @@ use directories::UserDirs;
 use enum_default::EnumDefault;
 use flexi_logger::{AdaptiveFormat, Logger};
 use home_dir::HomeDirExt;
+use itertools::Itertools;
 use log::{debug, error, info, trace};
 use rand::Rng;
 use shlex::Shlex;
@@ -851,22 +852,8 @@ impl Session {
     /// Break a session with many panes in one window into one with
     /// many windows.
     fn break_panes(&mut self) -> Result<bool> {
-        let windowlist: Vec<u8> = String::from_utf8(
-            TmuxCommand::new()
-                .list_windows()
-                .format("#{window_index}")
-                .target_session(&self.sesname)
-                .output()?
-                .stdout(),
-        )?
-        .split_terminator('\n')
-        .map(|l| l.parse::<u8>().unwrap_or(8))
-        .collect();
-        debug!("Windows: {:#?}", windowlist);
-
-        // for win in windowlist {
-        // }
-        let panes: Vec<(&str, &str)> = String::from_utf8(
+        // List of panes
+        let plist: Vec<String> = String::from_utf8(
             TmuxCommand::new()
                 .list_panes()
                 .format("#{s/ssh //:pane_start_command} #{pane_id}")
@@ -876,16 +863,32 @@ impl Session {
                 .stdout(),
         )?
         .split_terminator('\n')
-        .map(|pane| {
-            let mut f = pane.to_string().split_whitespace();
-            (f.next().unwrap(), f.next().unwrap())
-        })
-        // .map(|l| (l.to_string().split_whitespace(); l.next(), l.next();
-        //       unzip()))
+        .map(|s| s.to_string())
         .collect();
-        debug!("Panes: {:#?}", panes);
 
-        unimplemented!("To be written!");
+        // Morph into a tuple. Can probably be merged with the above.
+        let panes: Vec<(&str, &str)> = plist
+            .iter()
+            .map(|x| {
+                x.split_whitespace()
+                    .map(|y| y.trim())
+                    .collect_tuple()
+                    .unwrap()
+            })
+            .collect();
+
+        // Go over all panes, break them out into new windows. Window
+        // name is whatever they had, minus a (possible) ssh in front
+        for (pname, pid) in panes {
+            trace!("Breaking off pane {pname}, id {pid}");
+            TmuxCommand::new()
+                .break_pane()
+                .detached()
+                .window_name(pname)
+                .src_pane(pid)
+                .output()?;
+        }
+
         Ok(true)
     }
 
@@ -1204,7 +1207,12 @@ fn main() -> Result<()> {
             }
             Commands::B { sesname } => {
                 trace!("b subcommand called, breaking panes into windows for {sesname}");
-                session.break_panes()?;
+                if session.exists() {
+                    session.break_panes()?;
+                } else {
+                    info!("No session {sesname} exists, can not break");
+                    println!("No session {sesname}");
+                }
             }
             Commands::J { sesname } => {
                 trace!("j subcommand called, joining windows into panes for {sesname}");
