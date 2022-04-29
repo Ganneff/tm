@@ -868,7 +868,7 @@ impl Session {
             x.split_whitespace()
                 .map(|y| y.trim().to_string())
                 .collect_tuple::<(String, String)>()
-                .unwrap()
+                .unwrap_or_else(|| panic!("Could not split pane information: {}", x))
         })
         .collect();
         trace!("{:#?}", panes);
