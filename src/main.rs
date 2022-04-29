@@ -853,7 +853,7 @@ impl Session {
     /// many windows.
     fn break_panes(&mut self) -> Result<bool> {
         // List of panes
-        let plist: Vec<String> = String::from_utf8(
+        let panes: Vec<(String, String)> = String::from_utf8(
             TmuxCommand::new()
                 .list_panes()
                 .format("#{s/ssh //:pane_start_command} #{pane_id}")
@@ -864,18 +864,14 @@ impl Session {
         )?
         .split_terminator('\n')
         .map(|s| s.to_string())
+        .map(|x| {
+            x.split_whitespace()
+                .map(|y| y.trim().to_string())
+                .collect_tuple::<(String, String)>()
+                .unwrap()
+        })
         .collect();
-
-        // Morph into a tuple. Can probably be merged with the above.
-        let panes: Vec<(&str, &str)> = plist
-            .iter()
-            .map(|x| {
-                x.split_whitespace()
-                    .map(|y| y.trim())
-                    .collect_tuple()
-                    .unwrap()
-            })
-            .collect();
+        trace!("{:#?}", panes);
 
         // Go over all panes, break them out into new windows. Window
         // name is whatever they had, minus a (possible) ssh in front
@@ -884,8 +880,8 @@ impl Session {
             TmuxCommand::new()
                 .break_pane()
                 .detached()
-                .window_name(pname)
-                .src_pane(pid)
+                .window_name(&pname)
+                .src_pane(&pid)
                 .output()?;
         }
 
