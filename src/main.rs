@@ -40,7 +40,6 @@ use std::{
     io::{self, BufRead, BufReader, BufWriter, Write},
     path::{Path, PathBuf},
     process::Command,
-    str::FromStr,
 };
 use tmux_interface::TmuxCommand;
 
@@ -226,13 +225,44 @@ macro_rules! fromenvstatic {
     };
     (asBool $envvar:literal, $default:literal) => {
         match env::var($envvar) {
-            Ok(val) => FromStr::from_str(&val).unwrap(),
+            Ok(val) => match val.to_ascii_lowercase().as_str() {
+                "true" => true,
+                "false" => false,
+                &_ => {
+                    // Test run as "cargo test -- --nocapture" will print this
+                    if cfg!(test) {
+                        println!(
+                            "Variable {} expects true or false, not {}, assuming {}",
+                            $envvar, val, $default
+                        );
+                    }
+                    error!(
+                        "Variable {} expects true or false, not {}, assuming {}",
+                        $envvar, val, $default
+                    );
+                    return $default;
+                }
+            },
             Err(_) => $default,
         }
     };
     (asU32 $envvar:literal, $default:literal) => {
         match env::var($envvar) {
-            Ok(val) => val.parse::<u32>().unwrap(),
+            Ok(val) => {
+                return val.parse::<u32>().unwrap_or_else(|err| {
+                    if cfg!(test) {
+                        println!(
+                            "Couldn't parse variable {} (value: {}) as number (error: {}), assuming {}",
+                            $envvar, val, err, $default
+                        );
+                    }
+                    error!(
+                        "Couldn't parse variable {} (value: {}) as number (error: {}), assuming {}",
+                        $envvar, val, err, $default
+                    );
+                    $default
+                });
+            }
             Err(_) => $default,
         }
     };
@@ -1537,7 +1567,7 @@ mod tests {
         env::set_var("TMSORT", "true");
         env::set_var("TMSESSHOST", "false");
         env::set_var("TMSSHCMD", "ssh");
-        env::set_var("TNWIN", "1");
+        env::set_var("TMWIN", "1");
         assert_eq!(*TMPDIR, "/tmp");
         assert_eq!(*TMOPTS, "-2");
         assert_eq!(*TMSORT, true);
