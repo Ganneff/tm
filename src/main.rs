@@ -393,6 +393,8 @@ struct Session {
     /// seperate, as are their current/previous window and session
     /// options.
     grouped: bool,
+    /// The session name when grouped
+    gsesname: String,
     /// The path to a session file
     sesfile: PathBuf,
     /// Type of session (file), from extension of file
@@ -416,30 +418,44 @@ impl Session {
         Ok(&self.sesname)
     }
 
-    /// Kill a session
-    fn kill(&self) -> Result<bool> {
-        trace!("Session.kill()");
-        if self.exists() {
-            debug!("Asked to kill session {}", self.sesname);
+    /// Kill session
+    fn realkill(&self, tokill: &String) -> Result<bool> {
+        trace!("session.realkill()");
+        if TmuxCommand::new()
+            .has_session()
+            .target_session(tokill)
+            .output()
+            .unwrap()
+            .0
+            .status
+            .success()
+        {
+            debug!("Asked to kill session {}", &tokill);
             if TmuxCommand::new()
                 .kill_session()
-                .target_session(&self.sesname)
+                .target_session(tokill)
                 .output()
                 .unwrap()
                 .0
                 .status
                 .success()
             {
-                info!("Session {} is no more", self.sesname);
+                info!("Session {} is no more", &tokill);
                 Ok(true)
             } else {
-                info!("Session {} could not be killed!", self.sesname);
-                Err(anyhow!("Session {} could not be killed!", self.sesname))
+                info!("Session {} could not be killed!", &tokill);
+                Err(anyhow!("Session {} could not be killed!", &tokill))
             }
         } else {
-            debug!("No such session {}", self.sesname);
-            Err(anyhow!("No such session {}", self.sesname))
+            debug!("No such session {}", &tokill);
+            Err(anyhow!("No such session {}", &tokill))
         }
+    }
+
+    /// Kill current known session
+    fn kill(&self) -> Result<bool> {
+        trace!("Session.kill()");
+        self.realkill(&self.sesname)
     }
 
     /// Check if a session exists
@@ -461,30 +477,49 @@ impl Session {
             if self.grouped {
                 let mut rng = rand::thread_rng();
                 let insert: u16 = rng.gen();
-                let oldsesname = self.sesname.clone();
-                self.sesname = format!("{}_{}", insert, oldsesname);
+                self.gsesname = format!("{}_{}", insert, self.sesname);
                 debug!(
                     "Grouped session wanted, setting new session {}, linking it with {}",
-                    self.sesname, oldsesname
+                    self.gsesname, self.sesname
                 );
-
-                TmuxCommand::new()
-                    .new_session()
-                    .session_name(&self.sesname)
-                    .group_name(&oldsesname)
-                    .output()?;
+                if cfg!(test) {
+                    TmuxCommand::new()
+                        .new_session()
+                        .detached()
+                        .session_name(&self.gsesname)
+                        .group_name(&self.sesname)
+                        .output()?;
+                } else {
+                    TmuxCommand::new()
+                        .new_session()
+                        .session_name(&self.gsesname)
+                        .group_name(&self.sesname)
+                        .output()?;
+                }
                 info!(
                     "Removing grouped session {} (not the original!)",
-                    &self.sesname
+                    &self.gsesname
                 );
-                self.kill()?;
+                if cfg!(test) {
+                    println!("Not removing grouped session {}", self.gsesname);
+                } else {
+                    self.realkill(&self.gsesname)?;
+                }
                 true
             } else {
-                TmuxCommand::new()
-                    .attach_session()
-                    .target_session(&self.sesname)
-                    .output()?;
-                true
+                if cfg!(test) {
+                    println!("Can not attach in test mode");
+                    match self.sesname.as_str() {
+                        "fakeattach" => true,
+                        &_ => false,
+                    }
+                } else {
+                    TmuxCommand::new()
+                        .attach_session()
+                        .target_session(&self.sesname)
+                        .output()?;
+                    true
+                }
             }
         } else {
             false
@@ -1574,6 +1609,64 @@ mod tests {
         assert_eq!(*TMSESSHOST, false);
         assert_eq!(*TMSSHCMD, "ssh");
         assert_eq!(*TMWIN, 1);
+    }
+
+    #[test]
+    fn test_attach() {
+        let mut session = Session {
+            ..Default::default()
+        };
+        // We want a new session
+        session.set_name("fakeattach").unwrap();
+        // Shouldn't exist
+        assert_eq!(false, session.exists());
+        // Lets create it
+        TmuxCommand::new()
+            .new_session()
+            .session_name(&session.sesname)
+            .detached()
+            .shell_command("/bin/bash")
+            .output()
+            .unwrap();
+        // Is it there?
+        assert_eq!(true, session.exists());
+        // Now try the attach. if cfg!(test) code should just return true
+        assert_eq!(true, session.attach().unwrap());
+        // Grouped sessions are nice
+        session.grouped = true;
+        // Try attach again
+        assert_eq!(true, session.attach().unwrap());
+        // gsesname will contain session name plus random string
+        // FIXME: Better check with a regex to be written
+        assert_ne!(session.sesname, session.gsesname);
+        println!("Grouped session name: {}", session.gsesname);
+        // Get rid of session - this will remove the original one
+        session.kill();
+        // FIXME: Check that it only removed the original one
+        // Now get rid of the grouped session too.
+        assert_eq!(true, session.realkill(&session.gsesname).unwrap());
+
+        println!("Moo");
+        // And now we test somethign that shouldn't work for attach
+        session.set_name("notfakeattach").unwrap();
+        // Not grouped
+        session.grouped = false;
+        // Shouldn't exist
+        assert_eq!(false, session.exists());
+        // Lets create it
+        TmuxCommand::new()
+            .new_session()
+            .session_name(&session.sesname)
+            .detached()
+            .shell_command("/bin/bash")
+            .output()
+            .unwrap();
+        // Is it there?
+        assert_eq!(true, session.exists());
+        // Now try the attach. if cfg!(test) code should just return false here
+        assert_eq!(false, session.attach().unwrap());
+        // Get rid of session
+        session.kill();
     }
 
     #[test]
