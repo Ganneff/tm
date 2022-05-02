@@ -1400,7 +1400,6 @@ mod tests {
     use regex::Regex;
 
     #[test]
-    #[allow(clippy::bool_assert_comparison)]
     fn test_cmdline_getopts_simpleopt() {
         let mut session = Session {
             ..Default::default()
@@ -1423,6 +1422,22 @@ mod tests {
         assert_eq!(
             cli.find_session_name(&mut session).unwrap(),
             "killsession".to_string()
+        );
+
+        // -b to break a session into many windows
+        cli = Cli::parse_from("tm -b breaksession".split_whitespace());
+        assert_eq!(cli.breakw, Some("breaksession".to_string()));
+        assert_eq!(
+            cli.find_session_name(&mut session).unwrap(),
+            "breaksession".to_string()
+        );
+
+        // -j to join many windows into one pane
+        cli = Cli::parse_from("tm -j joinsession".split_whitespace());
+        assert_eq!(cli.joinw, Some("joinsession".to_string()));
+        assert_eq!(
+            cli.find_session_name(&mut session).unwrap(),
+            "joinsession".to_string()
         );
 
         // -k to kill a session - second value on commandline should not
@@ -1456,7 +1471,6 @@ mod tests {
     }
 
     #[test]
-    #[allow(clippy::bool_assert_comparison)]
     fn test_cmdline_getopts_s() {
         let mut session = Session {
             ..Default::default()
@@ -1495,7 +1509,6 @@ mod tests {
     }
 
     #[test]
-    #[allow(clippy::bool_assert_comparison)]
     fn test_cmdline_getopts_ms() {
         let mut session = Session {
             ..Default::default()
@@ -1575,7 +1588,6 @@ mod tests {
     }
 
     #[test]
-    #[allow(clippy::bool_assert_comparison)]
     fn test_cmdline_k() {
         let mut session = Session {
             ..Default::default()
@@ -1590,6 +1602,54 @@ mod tests {
         assert_eq!(
             cc,
             &Commands::K {
+                sesname: "session".to_string()
+            }
+        );
+        assert_eq!(
+            cli.find_session_name(&mut session).unwrap(),
+            "session".to_string()
+        );
+    }
+
+    #[test]
+    fn test_cmdline_b() {
+        let mut session = Session {
+            ..Default::default()
+        };
+        // k is kill that session
+        let cli = Cli::parse_from("tm b session".split_whitespace());
+        assert_eq!(
+            cli.find_session_name(&mut session).unwrap(),
+            "session".to_string()
+        );
+        let cc = cli.command.as_ref().unwrap();
+        assert_eq!(
+            cc,
+            &Commands::B {
+                sesname: "session".to_string()
+            }
+        );
+        assert_eq!(
+            cli.find_session_name(&mut session).unwrap(),
+            "session".to_string()
+        );
+    }
+
+    #[test]
+    fn test_cmdline_j() {
+        let mut session = Session {
+            ..Default::default()
+        };
+        // k is kill that session
+        let cli = Cli::parse_from("tm j session".split_whitespace());
+        assert_eq!(
+            cli.find_session_name(&mut session).unwrap(),
+            "session".to_string()
+        );
+        let cc = cli.command.as_ref().unwrap();
+        assert_eq!(
+            cc,
+            &Commands::J {
                 sesname: "session".to_string()
             }
         );
