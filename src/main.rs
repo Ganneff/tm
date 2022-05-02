@@ -1734,8 +1734,8 @@ mod tests {
         // Now get rid of the grouped session too.
         assert!(session.realkill(&session.gsesname).unwrap());
 
-        println!("Moo");
-        // And now we test somethign that shouldn't work for attach
+        assert!(!session.exists());
+        // And now we test something that shouldn't work for attach
         session.set_name("notfakeattach").unwrap();
         // Not grouped
         session.grouped = false;
@@ -1886,7 +1886,8 @@ mod tests {
         let checktext = format!("{}: 2 windows", session.sesname);
         assert!(
             output.contains(&checktext),
-            "Could not correctly setup extended session"
+            "Could not correctly setup extended session, output is {:#?}",
+            output
         );
 
         // At the end, get rid of the test session
