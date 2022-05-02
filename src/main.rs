@@ -431,7 +431,7 @@ impl Session {
     }
 
     /// Kill session
-    fn realkill(&self, tokill: &String) -> Result<bool> {
+    fn realkill(&self, tokill: &str) -> Result<bool> {
         trace!("session.realkill()");
         if TmuxCommand::new()
             .has_session()
@@ -442,7 +442,7 @@ impl Session {
             .status
             .success()
         {
-            debug!("Asked to kill session {}", &tokill);
+            debug!("Asked to kill session {}", tokill);
             if TmuxCommand::new()
                 .kill_session()
                 .target_session(tokill)
@@ -452,15 +452,15 @@ impl Session {
                 .status
                 .success()
             {
-                info!("Session {} is no more", &tokill);
+                info!("Session {} is no more", tokill);
                 Ok(true)
             } else {
-                info!("Session {} could not be killed!", &tokill);
-                Err(anyhow!("Session {} could not be killed!", &tokill))
+                info!("Session {} could not be killed!", tokill);
+                Err(anyhow!("Session {} could not be killed!", tokill))
             }
         } else {
-            debug!("No such session {}", &tokill);
-            Err(anyhow!("No such session {}", &tokill))
+            debug!("No such session {}", tokill);
+            Err(anyhow!("No such session {}", tokill))
         }
     }
 
@@ -518,20 +518,18 @@ impl Session {
                     self.realkill(&self.gsesname)?;
                 }
                 true
-            } else {
-                if cfg!(test) {
-                    println!("Can not attach in test mode");
-                    match self.sesname.as_str() {
-                        "fakeattach" => true,
-                        &_ => false,
-                    }
-                } else {
-                    TmuxCommand::new()
-                        .attach_session()
-                        .target_session(&self.sesname)
-                        .output()?;
-                    true
+            } else if cfg!(test) {
+                println!("Can not attach in test mode");
+                match self.sesname.as_str() {
+                    "fakeattach" => true,
+                    &_ => false,
                 }
+            } else {
+                TmuxCommand::new()
+                    .attach_session()
+                    .target_session(&self.sesname)
+                    .output()?;
+                true
             }
         } else {
             false
@@ -1417,7 +1415,7 @@ mod tests {
 
         // -l is ls
         cli = Cli::parse_from("tm -l".split_whitespace());
-        assert_eq!(cli.ls, true);
+        assert!(cli.ls);
 
         // -k to kill a session
         cli = Cli::parse_from("tm -k killsession".split_whitespace());
@@ -1438,23 +1436,23 @@ mod tests {
 
         // -v/-q goes via clap_verbosity, just check that we did not suddenly redefine it
         assert_eq!(cli.verbose.log_level_filter(), log::LevelFilter::Error);
-        assert_eq!(cli.verbose.is_silent(), false);
+        assert!(!cli.verbose.is_silent());
         cli = Cli::parse_from("tm -v".split_whitespace());
         assert_eq!(cli.verbose.log_level_filter(), log::LevelFilter::Warn);
-        assert_eq!(cli.verbose.is_silent(), false);
+        assert!(!cli.verbose.is_silent());
         cli = Cli::parse_from("tm -vvvv".split_whitespace());
         assert_eq!(cli.verbose.log_level_filter(), log::LevelFilter::Trace);
         cli = Cli::parse_from("tm -q".split_whitespace());
         assert_eq!(cli.verbose.log_level_filter(), log::LevelFilter::Off);
-        assert_eq!(cli.verbose.is_silent(), true);
+        assert!(cli.verbose.is_silent());
 
         // -n wants a second session to same hosts as existing one
         let mut cli = Cli::parse_from("tm -n".split_whitespace());
-        assert_eq!(cli.second, true);
+        assert!(cli.second);
 
         // -g attaches existing session, but different window config
         cli = Cli::parse_from("tm -g".split_whitespace());
-        assert_eq!(cli.group, true);
+        assert!(cli.group);
     }
 
     #[test]
@@ -1489,7 +1487,7 @@ mod tests {
         let sesname = cli.find_session_name(&mut session).unwrap();
         // -n puts a random number into the name, so check with regex
         let re = Regex::new(r"^s_\d+_testhost$").unwrap();
-        assert_eq!(re.is_match(&sesname), true);
+        assert!(re.is_match(&sesname));
         assert_ne!(
             cli.find_session_name(&mut session).unwrap(),
             "s_testhost".to_string()
@@ -1525,7 +1523,7 @@ mod tests {
         let sesname = cli.find_session_name(&mut session).unwrap();
         // -n puts a random number into the name, so check with regex
         let re = Regex::new(r"^ms_\d+_morehost_testhost$").unwrap();
-        assert_eq!(re.is_match(&sesname), true);
+        assert!(re.is_match(&sesname));
         assert_ne!(
             cli.find_session_name(&mut session).unwrap(),
             "ms_morehost_testhosts".to_string()
@@ -1536,15 +1534,15 @@ mod tests {
     #[allow(clippy::bool_assert_comparison)]
     fn test_cmdline_ls() {
         let mut cli = Cli::parse_from("tm ls".split_whitespace());
-        assert_eq!(cli.ls, false);
+        assert!(!cli.ls);
         assert_eq!(cli.command, Some(Commands::Ls {}));
 
         // -v/-q goes via clap_verbosity, just check that we did not suddenly redefine it
         assert_eq!(cli.verbose.log_level_filter(), log::LevelFilter::Error);
-        assert_eq!(cli.verbose.is_silent(), false);
+        assert!(!cli.verbose.is_silent());
         cli = Cli::parse_from("tm -v".split_whitespace());
         assert_eq!(cli.verbose.log_level_filter(), log::LevelFilter::Warn);
-        assert_eq!(cli.verbose.is_silent(), false);
+        assert!(!cli.verbose.is_silent());
     }
 
     #[test]
@@ -1635,8 +1633,8 @@ mod tests {
         env::set_var("TMWIN", "1");
         assert_eq!(*TMPDIR, "/tmp");
         assert_eq!(*TMOPTS, "-2");
-        assert_eq!(*TMSORT, true);
-        assert_eq!(*TMSESSHOST, false);
+        assert!(*TMSORT);
+        assert!(!*TMSESSHOST);
         assert_eq!(*TMSSHCMD, "ssh");
         assert_eq!(*TMWIN, 1);
     }
@@ -1649,7 +1647,7 @@ mod tests {
         // We want a new session
         session.set_name("fakeattach").unwrap();
         // Shouldn't exist
-        assert_eq!(false, session.exists());
+        assert!(!session.exists());
         // Lets create it
         TmuxCommand::new()
             .new_session()
@@ -1659,22 +1657,22 @@ mod tests {
             .output()
             .unwrap();
         // Is it there?
-        assert_eq!(true, session.exists());
+        assert!(session.exists());
         // Now try the attach. if cfg!(test) code should just return true
-        assert_eq!(true, session.attach().unwrap());
+        assert!(session.attach().unwrap());
         // Grouped sessions are nice
         session.grouped = true;
         // Try attach again
-        assert_eq!(true, session.attach().unwrap());
+        assert!(session.attach().unwrap());
         // gsesname will contain session name plus random string
         // FIXME: Better check with a regex to be written
         assert_ne!(session.sesname, session.gsesname);
         println!("Grouped session name: {}", session.gsesname);
         // Get rid of session - this will remove the original one
-        session.kill();
+        session.kill().unwrap();
         // FIXME: Check that it only removed the original one
         // Now get rid of the grouped session too.
-        assert_eq!(true, session.realkill(&session.gsesname).unwrap());
+        assert!(session.realkill(&session.gsesname).unwrap());
 
         println!("Moo");
         // And now we test somethign that shouldn't work for attach
@@ -1682,7 +1680,7 @@ mod tests {
         // Not grouped
         session.grouped = false;
         // Shouldn't exist
-        assert_eq!(false, session.exists());
+        assert!(!session.exists());
         // Lets create it
         TmuxCommand::new()
             .new_session()
@@ -1692,11 +1690,11 @@ mod tests {
             .output()
             .unwrap();
         // Is it there?
-        assert_eq!(true, session.exists());
+        assert!(session.exists());
         // Now try the attach. if cfg!(test) code should just return false here
-        assert_eq!(false, session.attach().unwrap());
+        assert!(!session.attach().unwrap());
         // Get rid of session
-        session.kill();
+        session.kill().unwrap();
     }
 
     #[test]
@@ -1705,7 +1703,7 @@ mod tests {
             ..Default::default()
         };
         session.set_name("tmtestsession").unwrap();
-        assert_eq!(false, session.exists());
+        assert!(!session.exists());
         TmuxCommand::new()
             .new_session()
             .session_name(&session.sesname)
@@ -1713,7 +1711,7 @@ mod tests {
             .shell_command("/bin/bash")
             .output()
             .unwrap();
-        assert_eq!(true, session.exists());
+        assert!(session.exists());
 
         // We want to check the output of ls contains our session from
         // above, so have it "write" it to a variable, then check if
@@ -1723,14 +1721,14 @@ mod tests {
         ls(&mut handle).unwrap();
         handle.flush().unwrap();
 
-        assert_eq!(true, session.kill().unwrap());
+        assert!(session.kill().unwrap());
         assert!(session.kill().is_err());
-        assert_eq!(false, session.exists());
+        assert!(!session.exists());
 
         // And now check what got "written" into the variable
         let (recovered_writer, _buffered_data) = handle.into_parts();
         let output = String::from_utf8(recovered_writer).unwrap();
-        assert_eq!(output.contains(&session.sesname), true);
+        assert!(output.contains(&session.sesname));
     }
 
     #[test]
@@ -1751,12 +1749,12 @@ mod tests {
         let mut line = "justonehost";
         let mut replace = None;
         let mut current_dir = Path::new("/");
-        let mut res = parse_line(&line, &replace, &current_dir).unwrap();
+        let mut res = parse_line(line, &replace, current_dir).unwrap();
         assert_eq!(res, vec!["justonehost".to_string()]);
         line = "LIST /bin/echo \"onehost\ntwohost\nthreehost\"";
         replace = None;
         current_dir = Path::new("/");
-        res = parse_line(&line, &replace, &current_dir).unwrap();
+        res = parse_line(line, &replace, current_dir).unwrap();
         assert_eq!(
             res,
             vec![
@@ -1768,7 +1766,7 @@ mod tests {
         line = "LIST /bin/echo \"onehost\ntwohost\nthreehost\nfoobar\nLIST /bin/echo \"LIST /bin/echo \"bar\nbaz\n\"\n\"\"";
         replace = None;
         current_dir = Path::new("/");
-        res = parse_line(&line, &replace, &current_dir).unwrap();
+        res = parse_line(line, &replace, current_dir).unwrap();
         assert_eq!(
             res,
             vec![
@@ -1783,7 +1781,7 @@ mod tests {
         line = " ";
         replace = None;
         current_dir = Path::new("/");
-        res = parse_line(&line, &replace, &current_dir).unwrap();
+        res = parse_line(line, &replace, current_dir).unwrap();
         let empty: Vec<String> = vec![];
         assert_eq!(res, empty);
     }
