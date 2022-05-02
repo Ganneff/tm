@@ -940,7 +940,6 @@ impl Session {
                 .stdout(),
         )?
         .split_terminator('\n')
-        .map(|s| s.to_string())
         .map(|x| {
             x.split_whitespace()
                 .map(|y| y.trim().to_string())
