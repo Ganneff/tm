@@ -831,6 +831,7 @@ impl Session {
                                     // No space for new pane -> redo the layout so windows are equally sized again
                                     let out = TmuxCommand::new()
                                         .select_layout()
+                                        .target_pane(format!("{}:{}", self.sesname, wincount))
                                         .layout_name("main-horizontal")
                                         .output()
                                         .expect("Could not spread out layout");
@@ -958,6 +959,7 @@ impl Session {
                 .detached()
                 .window_name(&pname)
                 .src_pane(&pid)
+                .dst_window(self.sesname.to_string())
                 .output()?;
         }
 
@@ -1033,8 +1035,10 @@ impl Session {
                 }
             }
         }
+        self.setwinopt(*TMWIN, "synchronize-pane", "on")?;
         if TmuxCommand::new()
             .select_layout()
+            .target_pane(&first)
             .layout_name("tiled")
             .output()
             .unwrap()
@@ -1043,10 +1047,9 @@ impl Session {
             .success()
         {
             trace!("joining windows successful");
-            self.setwinopt(*TMWIN, "synchronize-pane", "on")?;
             Ok(true)
         } else {
-            trace!("joining windows failed");
+            trace!("joining windows in pane {} failed", &first);
             return Err(anyhow!("Setting layout failed"));
         }
     }
