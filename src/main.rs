@@ -1845,4 +1845,51 @@ mod tests {
         let empty: Vec<String> = vec![];
         assert_eq!(res, empty);
     }
+
+    #[test]
+    fn test_setup_extended_session() {
+        let mut session = Session {
+            ..Default::default()
+        };
+        session.set_name("testextended").unwrap();
+        // Fail, we have no data in session.targets yet
+        assert!(session.setup_extended_session().is_err());
+
+        // Put two lines in
+        session.targets.push(format!(
+            "new-session -d -s {0} -n {0} /bin/bash",
+            session.sesname
+        ));
+        session.targets.push(format!(
+            "split-window -h -p 50 -d -t {}:{} /bin/bash -c 'watch -n1 -d date -u'",
+            session.sesname, *TMWIN
+        ));
+        session.targets.push(format!(
+            "new-window -d -t {}:{} /bin/bash -c 'watch -n1 -d date -u'",
+            session.sesname, 3
+        ));
+
+        // This should work out
+        assert!(session.setup_extended_session().unwrap());
+
+        // We want to check the output of ls contains our session from
+        // above, so have it "write" it to a variable, then check if
+        // the variable contains the session name and that it has two windows
+        let lstext = Vec::new();
+        let mut handle = BufWriter::new(lstext);
+        ls(&mut handle).unwrap();
+        handle.flush().unwrap();
+
+        // And now check what got "written" into the variable
+        let (recovered_writer, _buffered_data) = handle.into_parts();
+        let output = String::from_utf8(recovered_writer).unwrap();
+        let checktext = format!("{}: 2 windows", session.sesname);
+        assert!(
+            output.contains(&checktext),
+            "Could not correctly setup extended session"
+        );
+
+        // At the end, get rid of the test session
+        assert!(session.kill().unwrap());
+    }
 }
