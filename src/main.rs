@@ -133,6 +133,14 @@ struct Cli {
     /// Value to use for replacing in session files (see their help)
     #[clap(display_order = 55)]
     replace: Option<String>,
+
+    /// Break a multi-session pane into single windows
+    #[clap(short = 'b', display_order = 60)]
+    breakw: Option<String>,
+
+    /// Join multiple windows into one single one with many panes
+    #[clap(short = 'j', display_order = 65)]
+    joinw: Option<String>,
 }
 
 #[derive(Subcommand, Debug, PartialEq)]
@@ -321,6 +329,10 @@ impl Cli {
                 self.session.clone().unwrap()
             } else if self.sshhosts != None || self.multihosts != None {
                 self.session_name_from_hosts()?
+            } else if self.breakw.is_some() {
+                self.breakw.as_ref().unwrap().clone()
+            } else if self.joinw.is_some() {
+                self.joinw.as_ref().unwrap().clone()
             } else if self.command != None {
                 match &self.command.as_ref().unwrap() {
                     Commands::S { hosts: _ } | Commands::Ms { hosts: _ } => {
@@ -1302,6 +1314,22 @@ fn main() -> Result<()> {
             if session.setup_simple_session()? {
                 session.attach()?;
             }
+        }
+    } else if cli.breakw.is_some() {
+        trace!("Breaking up session");
+        if session.exists() {
+            session.break_panes()?;
+        } else {
+            info!("No session {} exists, can not break", session.sesname);
+            println!("No session {sesname}");
+        }
+    } else if cli.joinw.is_some() {
+        trace!("Joining session");
+        if session.exists() {
+            session.join_windows()?;
+        } else {
+            info!("No session {} exists, can not join", session.sesname);
+            println!("No session {sesname}");
         }
     };
 
