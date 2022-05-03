@@ -1870,7 +1870,7 @@ mod tests {
         ));
 
         // This should work out
-        assert!(session.setup_extended_session().unwrap());
+        session.setup_extended_session().unwrap();
 
         // We want to check the output of ls contains our session from
         // above, so have it "write" it to a variable, then check if
