@@ -48,7 +48,9 @@ jobs:
             ~/.cargo/git
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
-            ${{ runner.os }}-cargo-    
+            ${{ runner.os }}-cargo-
+      - name: apt-get install a package
+        run: sudo apt-get install -y tmux
       - name: Run task ${{ matrix.jobs.name }}
         run: ${{ matrix.jobs.task }}
   
@@ -63,6 +65,8 @@ jobs:
         with:
           toolchain: stable
           override: true
+      - name: apt-get install a package
+        run: sudo apt-get install -y tmux
       - name: Run cargo-tarpaulin
         uses: actions-rs/tarpaulin@v0.1
       - name: Upload to codecov.io
