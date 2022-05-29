@@ -312,7 +312,6 @@ impl Cli {
             );
             hosts.insert(1, insert.to_string());
         }
-        // Replace a set of characters we do not want in the session name with _
         let name = hosts.join("_");
         debug!("Generated session name: {}", name);
         Ok(name)
@@ -667,11 +666,10 @@ impl Session {
                     // looking for a session with the name the user gave
                     // us as argument. And it did not exist.
                     //
-                    // Unlucky us, this first line may NOT be the same as
-                    // that session name. So we check again, and if a
-                    // session name like this already exists, we error
-                    // out. Could, *maybe* attach to that? Unsure. Might
-                    // be surprising.
+                    // Unlucky us, this first line may NOT be the same
+                    // as that session name. So we check again, and if
+                    // a session name like this already exists, we try
+                    // attaching to it.
                     sesname = self.set_name(&line)?.to_string();
                     if self.exists() {
                         info!("Session matches existing one, attaching");
@@ -719,13 +717,12 @@ impl Session {
                 // We have a nice set of hosts and a session name, lets set it all up
                 self.synced = true;
                 self.setup_simple_session()?;
-                self.attach()?;
             }
             SessionType::Extended => {
                 self.setup_extended_session()?;
-                self.attach()?;
             }
         }
+        self.attach()?;
         Ok(())
     }
 
@@ -743,11 +740,14 @@ impl Session {
             return Err(anyhow!("No targets setup, can not open session"));
         }
 
-        for mut x in self.targets.clone() {
-            debug!("Command: {}", x);
-            x.insert_str(0, "tmux ");
-            trace!("Actually running: {}", x);
-            let output = TmuxCommand::new().run_shell().shell_command(&x).output()?;
+        for mut command in self.targets.clone() {
+            debug!("Command: {}", command);
+            command.insert_str(0, "tmux ");
+            trace!("Actually running: {}", command);
+            let output = TmuxCommand::new()
+                .run_shell()
+                .shell_command(command)
+                .output()?;
             trace!("Shell: {:?}", output);
         }
         Ok(true)
@@ -766,6 +766,9 @@ impl Session {
         if self.targets.is_empty() {
             return Err(anyhow!("No targets setup, can not open session"));
         }
+
+        // And start the session by opening it with the shell command
+        // directly going to the first target
         TmuxCommand::new()
             .new_session()
             .detached()
@@ -787,13 +790,13 @@ impl Session {
             let mut others = self.targets.clone().into_iter();
             // Skip the first, we already opened a connection
             others.next();
-            for x in others {
+            for target in others {
                 // For the syncssh session, we count how often we tried to create a pane
                 let mut count = 1;
                 loop {
                     debug!(
                         "Opening window/pane for {}, destination {}",
-                        self.sesname, x
+                        self.sesname, target
                     );
                     match self.synced {
                         true => {
@@ -803,7 +806,7 @@ impl Session {
                                 .size(&tmux_interface::commands::PaneSize::Percentage(1))
                                 .detached()
                                 .target_window(&self.sesname)
-                                .shell_command(format!("{} {}", *TMSSHCMD, &x))
+                                .shell_command(format!("{} {}", *TMSSHCMD, &target))
                                 .output()
                                 .unwrap();
 
@@ -816,7 +819,7 @@ impl Session {
                                 // Didn't work, lets help tmux along and then retry this
                                 debug!("split-window did not work");
                                 if count >= 3 {
-                                    return Err(anyhow!("Could not successfully create another pane for {}, tried {} times", x, count));
+                                    return Err(anyhow!("Could not successfully create another pane for {}, tried {} times", target, count));
                                 }
                                 count += 1;
 
@@ -847,9 +850,9 @@ impl Session {
                                 .new_window()
                                 .detached()
                                 .add()
-                                .window_name(&x)
+                                .window_name(&target)
                                 .target_window(&self.sesname)
-                                .shell_command(format!("{} {}", *TMSSHCMD, &x))
+                                .shell_command(format!("{} {}", *TMSSHCMD, &target))
                                 .output()?;
                             debug!("Window/Pane {} opened", wincount);
                             self.setwinopt(wincount, "automatic-rename", "off")?;
