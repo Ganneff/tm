@@ -326,6 +326,8 @@ impl Cli {
                 self.kill.clone().unwrap()
             } else if self.session.is_some() {
                 self.session.clone().unwrap()
+            } else if self.config.is_some() {
+                self.config.clone().unwrap()
             } else if self.sshhosts != None || self.multihosts != None {
                 self.session_name_from_hosts()?
             } else if self.breakw.is_some() {
@@ -1277,8 +1279,13 @@ fn main() -> Result<()> {
         handle.flush()?;
     } else if cli.kill.is_some() {
         session.kill()?;
-    } else if cli.session.is_some() {
-        let sespath = Path::join(Path::new(&*TMDIR), Path::new(&cli.session.clone().unwrap()));
+    } else if cli.session.is_some() || cli.config.is_some() {
+        let sespath = if cli.session.is_some() {
+            Path::join(Path::new(&*TMDIR), Path::new(&cli.session.clone().unwrap()))
+        } else {
+            Path::join(Path::new(&*TMDIR), Path::new(&cli.config.clone().unwrap()))
+        };
+
         if Path::new(&sespath).exists() {
             trace!(
                 "Should attach session {} or configure session from {:?}",
