@@ -31,7 +31,8 @@ use flexi_logger::{AdaptiveFormat, Logger};
 use home_dir::HomeDirExt;
 use itertools::Itertools;
 use log::{debug, error, info, trace};
-use rand::Rng;
+use rand::distributions::Alphanumeric;
+use rand::{thread_rng, Rng};
 use shlex::Shlex;
 use std::{
     env,
@@ -744,6 +745,41 @@ impl Session {
 
         for mut command in self.targets.clone() {
             debug!("Command: {}", command);
+            // The trick with run-shell later is nice, but if we
+            // happen to be the very first tmux session to start, it
+            // will break with "No tmux server running". So whenever
+            // we see a "new-session" command, we setup a fake session
+            // which closes itself after one second, just so that one
+            // is there and makes run-shell work.
+            //
+            // Alternative would be parsing the new-session line to
+            // correctly run new-session ourself, but I do not want
+            // to parse.
+            //
+            // FIXME: We should check if a tmux is running and only
+            // then do the trick.
+            let first = command.split_whitespace().next();
+            match first {
+                Some("new-session") => {
+                    debug!("New Session");
+                    let tempsesname: String = thread_rng()
+                        .sample_iter(&Alphanumeric)
+                        .take(30)
+                        .map(char::from)
+                        .collect();
+                    TmuxCommand::new()
+                        .new_session()
+                        .detached()
+                        .session_name(&tempsesname)
+                        .window_name("to be killed")
+                        .shell_command("sleep 1")
+                        .output()?;
+                }
+                Some(&_) => {
+                    debug!("Whatever else");
+                }
+                None => {}
+            }
             command.insert_str(0, "tmux ");
             trace!("Actually running: {}", command);
             let output = TmuxCommand::new()
