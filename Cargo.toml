@@ -15,7 +15,7 @@ clap = { version = "^3.1.18", features = ["derive", "env", "regex", "unicode", "
 clap-verbosity-flag = "^1"
 directories = "^4.0"
 enum_default = "0.2.5"
-flexi_logger = { version = "^0.22", features = ["colors"] }
+flexi_logger = { version = "^0.23", features = ["colors"] }
 home-dir = "^0.1"
 itertools = "0.10.3"
 lazy_static = "^1.4"
