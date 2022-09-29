@@ -12,7 +12,7 @@ repository = "https://github.com/Ganneff/tm"
 [dependencies]
 anyhow = "^1.0"
 clap = { version = "^3.1.18", features = ["derive", "env", "regex", "unicode", "wrap_help"] }
-clap-verbosity-flag = "^1"
+clap-verbosity-flag = "^2"
 directories = "^4.0"
 enum_default = "0.2.5"
 flexi_logger = { version = "^0.22", features = ["colors"] }
