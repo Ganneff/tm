@@ -58,7 +58,7 @@ struct Cli {
     /// List running sessions
     ///
     /// This is basically `tmux ls`
-    #[clap(short, display_order = 10, takes_value = false)]
+    #[clap(short, display_order = 10)]
     ls: bool,
 
     /// Open SSH session to the destination
@@ -69,12 +69,7 @@ struct Cli {
     ///
     /// When multiple destinations are specified, they are all opened
     /// into seperate tmux windows (not sessions!).
-    #[clap(
-        short = 's',
-        display_order = 15,
-        multiple_values = true,
-        min_values = 1
-    )]
+    #[clap(short = 's', display_order = 15)]
     sshhosts: Option<Vec<String>>,
 
     /// Open multi SSH sessions to hosts, synchronizing input.
@@ -85,12 +80,7 @@ struct Cli {
     /// into one single tmux window with many panes in there.
     /// Additionally, the "synchronize-input" option is turned on, so
     /// that anything entered will be send to every host.
-    #[clap(
-        short = 'm',
-        display_order = 20,
-        multiple_values = true,
-        min_values = 1
-    )]
+    #[clap(short = 'm', display_order = 20)]
     multihosts: Option<Vec<String>>,
 
     /// Open as second session to the same set of hosts as an existing
@@ -162,7 +152,7 @@ enum Commands {
         /// Target destinations for `ssh(1)`, which may be specified as
         /// either \[user@]hostname or a URI of the form
         /// ssh://\[user@]hostname\[:port].
-        #[clap(multiple_values = true, required = true)]
+        #[clap(required = true)]
         hosts: Vec<String>,
     },
 
@@ -176,7 +166,7 @@ enum Commands {
     Ms {
         /// List of target destinations for `ssh(1)`, the same details
         /// for the arguments as for [Cli::sshhosts] applies.
-        #[clap(multiple_values = true, required = true)]
+        #[clap(required = true)]
         hosts: Vec<String>,
     },
 
