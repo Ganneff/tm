@@ -69,7 +69,7 @@ struct Cli {
     ///
     /// When multiple destinations are specified, they are all opened
     /// into seperate tmux windows (not sessions!).
-    #[clap(short = 's', display_order = 15)]
+    #[clap(short = 's', display_order = 15, num_args = 1..)]
     sshhosts: Option<Vec<String>>,
 
     /// Open multi SSH sessions to hosts, synchronizing input.
@@ -80,7 +80,7 @@ struct Cli {
     /// into one single tmux window with many panes in there.
     /// Additionally, the "synchronize-input" option is turned on, so
     /// that anything entered will be send to every host.
-    #[clap(short = 'm', display_order = 20)]
+    #[clap(short = 'm', display_order = 20, num_args = 1..)]
     multihosts: Option<Vec<String>>,
 
     /// Open as second session to the same set of hosts as an existing
