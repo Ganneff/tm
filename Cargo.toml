@@ -29,4 +29,4 @@ tmux_interface = { version = "^0.2", features = ["tmux_2_8", "cmd_alias"], defau
 [workspace]
 
 [dev-dependencies]
-regex = "1.5"
+regex = "1.7"
