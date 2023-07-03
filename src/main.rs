@@ -27,6 +27,7 @@ use anyhow::{anyhow, Result};
 use clap::{Parser, Subcommand};
 use directories::UserDirs;
 use enum_default::EnumDefault;
+use fehler::{throw, throws};
 use flexi_logger::{AdaptiveFormat, Logger};
 use home_dir::HomeDirExt;
 use itertools::Itertools;
@@ -280,7 +281,8 @@ impl Cli {
     ///
     /// It also "cleans" the session name, that is, it replaces
     /// spaces, :, " and . with _ (underscores).
-    fn session_name_from_hosts(&self) -> Result<String> {
+    #[throws(anyhow::Error)]
+    fn session_name_from_hosts(&self) -> String {
         trace!("In session_name_from_hosts");
         let mut hosts = self.get_hosts()?;
         trace!(
@@ -292,7 +294,7 @@ impl Cli {
         if *TMSORT {
             hosts.sort();
         }
-        hosts.insert(0, self.get_insert());
+        hosts.insert(0, self.get_insert()?);
 
         if self.second {
             let mut rng = rand::thread_rng();
@@ -305,12 +307,13 @@ impl Cli {
         }
         let name = hosts.join("_");
         debug!("Generated session name: {}", name);
-        Ok(name)
+        name
     }
 
     /// Find (and set) a session name. Appears we have many
     /// possibilities to get at one, depending how we are called.
-    fn find_session_name(&self, session: &mut Session) -> Result<String> {
+    #[throws(anyhow::Error)]
+    fn find_session_name(&self, session: &mut Session) -> String {
         trace!("find_session_name");
         let possiblename: String = {
             if self.kill.is_some() {
@@ -340,11 +343,12 @@ impl Cli {
             }
         };
         let sesname = session.set_name(&possiblename)?;
-        Ok(sesname.to_string())
+        sesname.to_string()
     }
 
     /// Returns a string depending on subcommand called, to adjust
     /// session name with.
+    #[throws(anyhow::Error)]
     fn get_insert(&self) -> String {
         match &self.sshhosts {
             Some(_) => "s".to_string(),
@@ -362,14 +366,15 @@ impl Cli {
     /// Return a hostlist.
     ///
     /// The list can either be from the s or ms command.
-    fn get_hosts(&self) -> Result<Vec<String>> {
+    #[throws(anyhow::Error)]
+    fn get_hosts(&self) -> Vec<String> {
         match &self.sshhosts {
-            Some(v) => Ok(v.to_vec()),
+            Some(v) => v.to_vec(),
             None => match &self.multihosts {
-                Some(v) => Ok(v.to_vec()),
+                Some(v) => v.to_vec(),
                 None => match &self.command.as_ref().unwrap() {
-                    Commands::S { hosts } | Commands::Ms { hosts } => Ok(hosts.clone()),
-                    &_ => Err(anyhow!("No hosts supplied, can not get any")),
+                    Commands::S { hosts } | Commands::Ms { hosts } => hosts.clone(),
+                    &_ => throw!(anyhow!("No hosts supplied, can not get any")),
                 },
             },
         }
@@ -414,12 +419,13 @@ struct Session {
 impl Session {
     /// Takes a string, applies some cleanup, then stores it as
     /// session name, returning the cleaned up value
-    fn set_name(&mut self, newname: &str) -> Result<&String> {
+    #[throws(anyhow::Error)]
+    fn set_name(&mut self, newname: &str) -> &String {
         trace!("Session.set_name(), input: {}", newname);
         // Replace a set of characters we do not want in the session name with _
         self.sesname = newname.replace(&[' ', ':', '"', '.'][..], "_");
         trace!("Session name now: {}", self.sesname);
-        Ok(&self.sesname)
+        &self.sesname
     }
 
     /// Kill session
