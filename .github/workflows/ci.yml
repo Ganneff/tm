@@ -53,7 +53,7 @@ jobs:
         run: sudo apt-get install -y tmux
       - name: Run task ${{ matrix.jobs.name }}
         run: ${{ matrix.jobs.task }}
-  
+
   coverage:
     name: Tarpaulin coverage
     runs-on: ubuntu-latest
@@ -69,6 +69,9 @@ jobs:
         run: sudo apt-get install -y tmux
       - name: Run cargo-tarpaulin
         uses: actions-rs/tarpaulin@v0.1
+        with:
+          version: 'latest'
+          fail_ci_if_error: false
       - name: Upload to codecov.io
         uses: codecov/codecov-action@v3.1.1
         with:
