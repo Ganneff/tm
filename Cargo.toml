@@ -13,21 +13,22 @@ repository = "https://github.com/Ganneff/tm"
 anyhow = "^1.0"
 clap = { version = "4", features = ["derive", "env", "unicode", "wrap_help"] }
 clap-verbosity-flag = "^2"
-directories = "^4.0"
-enum_default = "0.2.5"
+directories = "^5.0"
 fehler = "1.0.0"
-flexi_logger = { version = "^0.24", features = ["colors"] }
+flexi_logger = { version = "^0.25", features = ["colors"] }
 home-dir = "^0.1"
-itertools = "0.10"
+itertools = "0.11"
 lazy_static = "^1.4"
 log = "^0.4"
-quit = "^1.1"
+quit = "^2.0"
 rand = "^0.8"
 shlex = "1.1.0"
 thiserror = "^1.0"
-tmux_interface = { version = "^0.2", features = ["tmux_2_8", "cmd_alias"], default-features = false }
+tmux_interface = { version = "^0.3", features = ["tmux_2_8", "cmd_alias"], default-features = false }
+tracing = { version = "0.1.37", features = ["attributes", "max_level_trace", "release_max_level_info"], default-features = false }
+tracing-subscriber = { features = ["fmt", "ansi", "tracing-log"], default-features = false, version = "0.3.17" }
 
 [workspace]
 
 [dev-dependencies]
-regex = "1.5"
+regex = "1.8"

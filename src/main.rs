@@ -26,12 +26,9 @@ extern crate lazy_static;
 use anyhow::{anyhow, Result};
 use clap::{Parser, Subcommand};
 use directories::UserDirs;
-use enum_default::EnumDefault;
 use fehler::{throw, throws};
-use flexi_logger::{AdaptiveFormat, Logger};
 use home_dir::HomeDirExt;
 use itertools::Itertools;
-use log::{debug, error, info, trace};
 use rand::distributions::Alphanumeric;
 use rand::{thread_rng, Rng};
 use shlex::Shlex;
@@ -43,7 +40,13 @@ use std::{
     path::{Path, PathBuf},
     process::Command,
 };
-use tmux_interface::TmuxCommand;
+use tmux_interface::{
+    AttachSession, BreakPane, HasSession, JoinPane, KillSession, ListPanes, ListSessions,
+    ListWindows, NewSession, NewWindow, RunShell, SelectLayout, SetOption, ShowOptions,
+    SplitWindow, Tmux,
+};
+use tracing::{debug, error, event, info, info_span, span, trace, warn, Level};
+use tracing_subscriber::FmtSubscriber;
 
 #[derive(Debug, Parser)]
 #[clap(author, version, about)]
@@ -282,6 +285,7 @@ impl Cli {
     /// It also "cleans" the session name, that is, it replaces
     /// spaces, :, " and . with _ (underscores).
     #[throws(anyhow::Error)]
+    #[tracing::instrument(level = "debug", ret)]
     fn session_name_from_hosts(&self) -> String {
         trace!("In session_name_from_hosts");
         let mut hosts = self.get_hosts()?;
@@ -313,6 +317,7 @@ impl Cli {
     /// Find (and set) a session name. Appears we have many
     /// possibilities to get at one, depending how we are called.
     #[throws(anyhow::Error)]
+    #[tracing::instrument(level = "debug", ret)]
     fn find_session_name(&self, session: &mut Session) -> String {
         trace!("find_session_name");
         let possiblename: String = {
@@ -348,6 +353,7 @@ impl Cli {
 
     /// Returns a string depending on subcommand called, to adjust
     /// session name with.
+    #[tracing::instrument(level = "debug", ret)]
     #[throws(anyhow::Error)]
     fn get_insert(&self) -> String {
         match &self.sshhosts {
@@ -367,6 +373,7 @@ impl Cli {
     ///
     /// The list can either be from the s or ms command.
     #[throws(anyhow::Error)]
+    #[tracing::instrument(level = "debug", ret)]
     fn get_hosts(&self) -> Vec<String> {
         match &self.sshhosts {
             Some(v) => v.to_vec(),
@@ -381,7 +388,7 @@ impl Cli {
     }
 }
 
-#[derive(EnumDefault, Debug)]
+#[derive(Default, Debug)]
 /// Possible Session types
 enum SessionType {
     #[default]
@@ -419,6 +426,7 @@ struct Session {
 impl Session {
     /// Takes a string, applies some cleanup, then stores it as
     /// session name, returning the cleaned up value
+    #[tracing::instrument(level = "debug")]
     #[throws(anyhow::Error)]
     fn set_name(&mut self, newname: &str) -> &String {
         trace!("Session.set_name(), input: {}", newname);
@@ -429,25 +437,16 @@ impl Session {
     }
 
     /// Kill session
+    #[tracing::instrument(level = "debug", ret)]
     fn realkill(&self, tokill: &str) -> Result<bool> {
         trace!("session.realkill()");
-        if TmuxCommand::new()
-            .has_session()
-            .target_session(tokill)
-            .output()
-            .unwrap()
-            .0
-            .status
+        if Tmux::with_command(HasSession::new().target_session(tokill))
+            .status()?
             .success()
         {
             debug!("Asked to kill session {}", tokill);
-            if TmuxCommand::new()
-                .kill_session()
-                .target_session(tokill)
-                .output()
-                .unwrap()
-                .0
-                .status
+            if Tmux::with_command(KillSession::new().target_session(tokill))
+                .status()?
                 .success()
             {
                 info!("Session {} is no more", tokill);
@@ -463,24 +462,22 @@ impl Session {
     }
 
     /// Kill current known session
+    #[tracing::instrument(level = "info", ret)]
     fn kill(&self) -> Result<bool> {
-        trace!("Session.kill()");
         self.realkill(&self.sesname)
     }
 
     /// Check if a session exists
+    #[tracing::instrument(level = "debug", ret)]
     fn exists(&self) -> bool {
-        TmuxCommand::new()
-            .has_session()
-            .target_session(&self.sesname)
-            .output()
+        Tmux::with_command(HasSession::new().target_session(&self.sesname))
+            .status()
             .unwrap()
-            .0
-            .status
             .success()
     }
 
     /// Attach to a running (or just prepared) tmux session
+    #[tracing::instrument(level = "debug", ret)]
     fn attach(&mut self) -> Result<bool> {
         trace!("Entering attach()");
         let ret = if self.exists() {
@@ -493,18 +490,20 @@ impl Session {
                     self.gsesname, self.sesname
                 );
                 if cfg!(test) {
-                    TmuxCommand::new()
-                        .new_session()
-                        .detached()
-                        .session_name(&self.gsesname)
-                        .group_name(&self.sesname)
-                        .output()?;
+                    Tmux::with_command(
+                        NewSession::new()
+                            .detached()
+                            .session_name(&self.gsesname)
+                            .group_name(&self.sesname),
+                    )
+                    .status()?;
                 } else {
-                    TmuxCommand::new()
-                        .new_session()
-                        .session_name(&self.gsesname)
-                        .group_name(&self.sesname)
-                        .output()?;
+                    Tmux::with_command(
+                        NewSession::new()
+                            .session_name(&self.gsesname)
+                            .group_name(&self.sesname),
+                    )
+                    .status()?;
                 }
                 info!(
                     "Removing grouped session {} (not the original!)",
@@ -523,11 +522,9 @@ impl Session {
                     &_ => false,
                 }
             } else {
-                TmuxCommand::new()
-                    .attach_session()
-                    .target_session(&self.sesname)
-                    .output()?;
-                true
+                Tmux::with_command(AttachSession::new().target_session(&self.sesname))
+                    .status()?
+                    .success()
             }
         } else {
             false
@@ -621,6 +618,7 @@ impl Session {
     /// set-window-option -t SESSION:TMWIN automatic-rename off
     /// set-window-option -t SESSION:TMWIN allow-rename off
     /// ```
+    #[tracing::instrument(level = "debug", ret)]
     fn read_session_file_and_attach(&mut self) -> Result<()> {
         trace!("Entering read_session_file");
         // Get the path of the session file
@@ -731,6 +729,7 @@ impl Session {
     /// them using tmux run-shell ability. Whatever the user setup in
     /// .cfg is executed - provided that tmux(1) knows it, ie. it is a
     /// valid tmux command.
+    #[tracing::instrument(level = "debug", ret)]
     fn setup_extended_session(&mut self) -> Result<bool> {
         trace!("Entering setup_extended_session");
         debug!("Creating session {}", self.sesname);
@@ -763,13 +762,14 @@ impl Session {
                         .take(30)
                         .map(char::from)
                         .collect();
-                    TmuxCommand::new()
-                        .new_session()
-                        .detached()
-                        .session_name(&tempsesname)
-                        .window_name("to be killed")
-                        .shell_command("sleep 1")
-                        .output()?;
+                    Tmux::with_command(
+                        NewSession::new()
+                            .detached()
+                            .session_name(&tempsesname)
+                            .window_name("to be killed")
+                            .shell_command("sleep 1"),
+                    )
+                    .status()?;
                 }
                 Some(&_) => {
                     debug!("Whatever else");
@@ -778,10 +778,7 @@ impl Session {
             }
             command.insert_str(0, "tmux ");
             trace!("Actually running: {}", command);
-            let output = TmuxCommand::new()
-                .run_shell()
-                .shell_command(command)
-                .output()?;
+            let output = Tmux::with_command(RunShell::new().shell_command(command)).output()?;
             trace!("Shell: {:?}", output);
         }
         Ok(true)
@@ -793,6 +790,7 @@ impl Session {
     ///
     /// Depending on value of session field [Session::synced] it will
     /// setup multiple windows, or one window with multiple panes.
+    #[tracing::instrument(level = "debug", ret)]
     fn setup_simple_session(&mut self) -> Result<bool> {
         trace!("Entering setup_simple_session");
         debug!("Creating session {}", self.sesname);
@@ -803,13 +801,14 @@ impl Session {
 
         // And start the session by opening it with the shell command
         // directly going to the first target
-        TmuxCommand::new()
-            .new_session()
-            .detached()
-            .session_name(&self.sesname)
-            .window_name(&self.targets[0])
-            .shell_command(format!("{} {}", *TMSSHCMD, &self.targets[0]))
-            .output()?;
+        Tmux::with_command(
+            NewSession::new()
+                .detached()
+                .session_name(&self.sesname)
+                .window_name(&self.targets[0])
+                .shell_command(format!("{} {}", *TMSSHCMD, &self.targets[0])),
+        )
+        .status()?;
 
         // Which window are we at? Start with TMWIN, later on count up (if
         // we open more than one)
@@ -835,14 +834,14 @@ impl Session {
                     match self.synced {
                         true => {
                             // split pane
-                            let output = TmuxCommand::new()
-                                .split_window()
-                                .size(&tmux_interface::commands::PaneSize::Percentage(1))
-                                .detached()
-                                .target_window(&self.sesname)
-                                .shell_command(format!("{} {}", *TMSSHCMD, &target))
-                                .output()
-                                .unwrap();
+                            let output = Tmux::with_command(
+                                SplitWindow::new()
+                                    .size(&tmux_interface::commands::PaneSize::Percentage(1))
+                                    .detached()
+                                    .target_window(&self.sesname)
+                                    .shell_command(format!("{} {}", *TMSSHCMD, &target)),
+                            )
+                            .output()?;
 
                             trace!("New pane: {:?}", output);
                             if output.0.status.success() {
@@ -864,12 +863,12 @@ impl Session {
                                 if reason.trim().eq_ignore_ascii_case("no space for new pane") {
                                     debug!("Panes getting too small, need to adjust layout");
                                     // No space for new pane -> redo the layout so windows are equally sized again
-                                    let out = TmuxCommand::new()
-                                        .select_layout()
-                                        .target_pane(format!("{}:{}", self.sesname, wincount))
-                                        .layout_name("main-horizontal")
-                                        .output()
-                                        .expect("Could not spread out layout");
+                                    let out = Tmux::with_command(
+                                        SelectLayout::new()
+                                            .target_pane(format!("{}:{}", self.sesname, wincount))
+                                            .layout_name("main-horizontal"),
+                                    )
+                                    .output()?;
                                     trace!("Layout result: {:#?}", out);
                                 };
                             };
@@ -880,14 +879,15 @@ impl Session {
                             // For the plain ssh session, we count the window we are in
                             wincount += 1;
                             // new window
-                            TmuxCommand::new()
-                                .new_window()
-                                .detached()
-                                .add()
-                                .window_name(&target)
-                                .target_window(&self.sesname)
-                                .shell_command(format!("{} {}", *TMSSHCMD, &target))
-                                .output()?;
+                            Tmux::with_command(
+                                NewWindow::new()
+                                    .detached()
+                                    .after()
+                                    .window_name(&target)
+                                    .target_window(&self.sesname)
+                                    .shell_command(format!("{} {}", *TMSSHCMD, &target)),
+                            )
+                            .status()?;
                             debug!("Window/Pane {} opened", wincount);
                             self.setwinopt(wincount, "automatic-rename", "off")?;
                             self.setwinopt(wincount, "allow-rename", "off")?;
@@ -901,13 +901,8 @@ impl Session {
                     // Now synchronize their input
                     self.setwinopt(wincount, "synchronize-pane", "on")?;
                     // And select a final layout that all of them have roughly the same size
-                    if TmuxCommand::new()
-                        .select_layout()
-                        .layout_name("tiled")
-                        .output()
-                        .unwrap()
-                        .0
-                        .status
+                    if Tmux::with_command(SelectLayout::new().layout_name("tiled"))
+                        .status()?
                         .success()
                     {
                         trace!("synced setup successful");
@@ -936,17 +931,19 @@ impl Session {
     /// session.setwinopt(windowindex, "automatic-rename", "off");
     /// # }
     /// ```
+    #[tracing::instrument(level = "debug", ret)]
     fn setwinopt(&mut self, index: u32, option: &str, value: &str) -> Result<bool> {
         trace!("setwinopt");
         let target = format!("{}:{}", self.sesname, index);
         debug!("Setting Window ({}) option {} to {}", target, option, value);
-        match TmuxCommand::new()
-            .set_option()
-            .window()
-            .target(&target)
-            .option(option)
-            .value(value)
-            .output()
+        match Tmux::with_command(
+            SetOption::new()
+                .window()
+                .target(&target)
+                .option(option)
+                .value(value),
+        )
+        .output()
         {
             Ok(_) => {
                 debug!("Window option successfully set");
@@ -964,16 +961,18 @@ impl Session {
 
     /// Break a session with many panes in one window into one with
     /// many windows.
+    #[tracing::instrument(level = "debug", ret)]
     fn break_panes(&mut self) -> Result<bool> {
         // List of panes
         let panes: Vec<(String, String)> = String::from_utf8(
-            TmuxCommand::new()
-                .list_panes()
-                .format("#{s/ssh //:pane_start_command} #{pane_id}")
-                .session()
-                .target(&self.sesname)
-                .output()?
-                .stdout(),
+            Tmux::with_command(
+                ListPanes::new()
+                    .format("#{s/ssh //:pane_start_command} #{pane_id}")
+                    .session()
+                    .target(&self.sesname),
+            )
+            .output()?
+            .stdout(),
         )?
         .split_terminator('\n')
         .map(|x| {
@@ -989,27 +988,30 @@ impl Session {
         // name is whatever they had, minus a (possible) ssh in front
         for (pname, pid) in panes {
             trace!("Breaking off pane {pname}, id {pid}");
-            TmuxCommand::new()
-                .break_pane()
-                .detached()
-                .window_name(&pname)
-                .src_pane(&pid)
-                .dst_window(self.sesname.to_string())
-                .output()?;
+            Tmux::with_command(
+                BreakPane::new()
+                    .detached()
+                    .window_name(&pname)
+                    .src_pane(&pid)
+                    .dst_window(self.sesname.to_string()),
+            )
+            .status()?;
         }
 
         Ok(true)
     }
 
     /// Join many windows into one window with many panes
+    #[tracing::instrument(level = "debug", ret)]
     fn join_windows(&mut self) -> Result<bool> {
         let windowlist: Vec<String> = String::from_utf8(
-            TmuxCommand::new()
-                .list_windows()
-                .format("#{window_id}")
-                .target_session(&self.sesname)
-                .output()?
-                .stdout(),
+            Tmux::with_command(
+                ListWindows::new()
+                    .format("#{window_id}")
+                    .target_session(&self.sesname),
+            )
+            .output()?
+            .stdout(),
         )?
         .split_terminator('\n')
         .map(|s| s.to_string())
@@ -1022,12 +1024,13 @@ impl Session {
                 let mut count = 1;
                 loop {
                     trace!("Joining {} to {}", &id, &first);
-                    let output = TmuxCommand::new()
-                        .join_pane()
-                        .detached()
-                        .src_pane(&id)
-                        .dst_pane(format!("{}:{}", self.sesname, first))
-                        .output()?;
+                    let output = Tmux::with_command(
+                        JoinPane::new()
+                            .detached()
+                            .src_pane(&id)
+                            .dst_pane(format!("{}:{}", self.sesname, first)),
+                    )
+                    .output()?;
                     trace!("Output: {:?}", output);
                     if output.0.status.success() {
                         // Exit the loop, we made it and got the window joined as a pane
@@ -1056,12 +1059,12 @@ impl Session {
                         {
                             debug!("Panes getting too small, need to adjust layout");
                             // No space for new pane -> redo the layout so windows are equally sized again
-                            let out = TmuxCommand::new()
-                                .select_layout()
-                                .target_pane(&first)
-                                .layout_name("main-horizontal")
-                                .output()
-                                .expect("Could not spread out layout");
+                            let out = Tmux::with_command(
+                                SelectLayout::new()
+                                    .target_pane(&first)
+                                    .layout_name("main-horizontal"),
+                            )
+                            .output()?;
                             trace!("Layout result: {:?}", out);
                         };
                     };
@@ -1071,14 +1074,8 @@ impl Session {
             }
         }
         self.setwinopt(*TMWIN, "synchronize-pane", "on")?;
-        if TmuxCommand::new()
-            .select_layout()
-            .target_pane(&first)
-            .layout_name("tiled")
-            .output()
-            .unwrap()
-            .0
-            .status
+        if Tmux::with_command(SelectLayout::new().target_pane(&first).layout_name("tiled"))
+            .status()?
             .success()
         {
             trace!("joining windows successful");
@@ -1140,12 +1137,11 @@ lazy_static! {
     /// 1.
     // FIXME: This depends on a running tmux daemon. None running -> data fetching
     // fails. Could fix to detect that and start one first, later killing that.
-    static ref TMWIN: u32 = match TmuxCommand::new()
-        .show_options()
+    static ref TMWIN: u32 = match Tmux::with_command(ShowOptions::new()
         .global()
         .quiet()
         .value()
-        .option("base-index")
+        .option("base-index"))
         .output()
     {
         Ok(v) => v.to_string().trim().parse().unwrap_or(1),
@@ -1156,12 +1152,11 @@ lazy_static! {
 /// Run ls
 ///
 /// Simply runs `tmux list-sessions`
+#[tracing::instrument(level = "debug", skip(handle), ret)]
 fn ls<W: Write>(handle: &mut BufWriter<W>) -> Result<()> {
     trace!("Entering ls");
-    let sessions = TmuxCommand::new()
-        .list_sessions()
-        .output()
-        .unwrap()
+    let sessions = Tmux::with_command(ListSessions::new())
+        .output()?
         .to_string();
     writeln!(handle, "{sessions}")?;
     trace!("Leaving ls");
@@ -1170,6 +1165,7 @@ fn ls<W: Write>(handle: &mut BufWriter<W>) -> Result<()> {
 
 /// Tiny helper to replace the magic ++TMREPLACETM++
 #[doc(hidden)]
+#[tracing::instrument(level = "debug", ret)]
 fn tmreplace(input: &str, replace: &Option<String>) -> Result<String> {
     match replace {
         Some(v) => Ok(input.replace("++TMREPLACETM++", v)),
@@ -1183,6 +1179,7 @@ fn tmreplace(input: &str, replace: &Option<String>) -> Result<String> {
 /// if that contains LIST again, recurse.
 ///
 /// Return all found hostnames.
+#[tracing::instrument(level = "debug", ret)]
 fn parse_line(line: &str, replace: &Option<String>, current_dir: &Path) -> Result<Vec<String>> {
     trace!("Entered parse_line");
     // We are interested in the first word to decide what we see
@@ -1272,12 +1269,30 @@ fn parse_line(line: &str, replace: &Option<String>, current_dir: &Path) -> Resul
 /// main, start it all off
 fn main() -> Result<()> {
     let cli = Cli::parse();
-    Logger::try_with_env_or_str(cli.verbose.log_level_filter().as_str())
-        .unwrap()
-        .adaptive_format_for_stderr(AdaptiveFormat::Opt)
-        .set_palette("b1;3;2;4;6".to_owned())
-        .start()
-        .unwrap();
+    let subscriber = FmtSubscriber::builder()
+        .with_max_level({
+            let filter = cli.verbose.log_level_filter();
+            match filter {
+                log::LevelFilter::Off => tracing_subscriber::filter::LevelFilter::OFF,
+                log::LevelFilter::Error => tracing_subscriber::filter::LevelFilter::ERROR,
+                log::LevelFilter::Warn => tracing_subscriber::filter::LevelFilter::WARN,
+                log::LevelFilter::Info => tracing_subscriber::filter::LevelFilter::INFO,
+                log::LevelFilter::Debug => tracing_subscriber::filter::LevelFilter::DEBUG,
+                log::LevelFilter::Trace => tracing_subscriber::filter::LevelFilter::TRACE,
+            }
+        })
+        .with_ansi(true)
+        .with_target(true)
+        .with_file(true)
+        .with_line_number(true)
+        .with_span_events(
+            tracing_subscriber::fmt::format::FmtSpan::ENTER
+                | tracing_subscriber::fmt::format::FmtSpan::CLOSE,
+        )
+        //        .pretty()
+        .finish();
+
+    tracing::subscriber::set_global_default(subscriber).expect("setting default subscriber failed");
 
     trace!("Program started");
     debug!("Cli options: {:#?}", cli);
@@ -1332,9 +1347,7 @@ fn main() -> Result<()> {
                 Ok(true) => debug!("Successfully attached"),
                 Ok(false) => {
                     debug!("Session not found, creating new one");
-                    TmuxCommand::new()
-                        .new_session()
-                        .session_name(&session.sesname)
+                    Tmux::with_command(NewSession::new().session_name(&session.sesname))
                         .output()?;
                 }
                 Err(val) => error!("Error: {val}"),
@@ -1751,13 +1764,14 @@ mod tests {
         // Shouldn't exist
         assert!(!session.exists());
         // Lets create it
-        TmuxCommand::new()
-            .new_session()
-            .session_name(&session.sesname)
-            .detached()
-            .shell_command("/bin/bash")
-            .output()
-            .unwrap();
+        Tmux::with_command(
+            NewSession::new()
+                .session_name(&session.sesname)
+                .detached()
+                .shell_command("/bin/bash"),
+        )
+        .output()
+        .unwrap();
         // Is it there?
         assert!(session.exists());
         // Now try the attach. if cfg!(test) code should just return true
@@ -1784,13 +1798,14 @@ mod tests {
         // Shouldn't exist
         assert!(!session.exists());
         // Lets create it
-        TmuxCommand::new()
-            .new_session()
-            .session_name(&session.sesname)
-            .detached()
-            .shell_command("/bin/bash")
-            .output()
-            .unwrap();
+        Tmux::with_command(
+            NewSession::new()
+                .session_name(&session.sesname)
+                .detached()
+                .shell_command("/bin/bash"),
+        )
+        .output()
+        .unwrap();
         // Is it there?
         assert!(session.exists());
         // Now try the attach. if cfg!(test) code should just return false here
@@ -1806,13 +1821,14 @@ mod tests {
         };
         session.set_name("tmtestsession").unwrap();
         assert!(!session.exists());
-        TmuxCommand::new()
-            .new_session()
-            .session_name(&session.sesname)
-            .detached()
-            .shell_command("/bin/bash")
-            .output()
-            .unwrap();
+        Tmux::with_command(
+            NewSession::new()
+                .session_name(&session.sesname)
+                .detached()
+                .shell_command("/bin/bash"),
+        )
+        .output()
+        .unwrap();
         assert!(session.exists());
 
         // We want to check the output of ls contains our session from
