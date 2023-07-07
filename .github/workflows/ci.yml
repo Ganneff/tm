@@ -71,7 +71,7 @@ jobs:
         uses: actions-rs/tarpaulin@v0.1
         with:
           version: 'latest'
-          fail_ci_if_error: false
+        continue-on-error: true
       - name: Upload to codecov.io
         uses: codecov/codecov-action@v3.1.1
         with:
