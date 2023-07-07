@@ -45,7 +45,7 @@ use tmux_interface::{
     ListWindows, NewSession, NewWindow, RunShell, SelectLayout, SetOption, ShowOptions,
     SplitWindow, Tmux,
 };
-use tracing::{debug, error, event, info, info_span, span, trace, warn, Level};
+use tracing::{debug, error, info, trace, warn};
 use tracing_subscriber::FmtSubscriber;
 
 #[derive(Debug, Parser)]
@@ -327,13 +327,13 @@ impl Cli {
                 self.session.clone().unwrap()
             } else if self.config.is_some() {
                 self.config.clone().unwrap()
-            } else if self.sshhosts != None || self.multihosts != None {
+            } else if self.sshhosts.is_some() || self.multihosts.is_some() {
                 self.session_name_from_hosts()?
             } else if self.breakw.is_some() {
                 self.breakw.as_ref().unwrap().clone()
             } else if self.joinw.is_some() {
                 self.joinw.as_ref().unwrap().clone()
-            } else if self.command != None {
+            } else if self.command.is_some() {
                 match &self.command.as_ref().unwrap() {
                     Commands::S { hosts: _ } | Commands::Ms { hosts: _ } => {
                         self.session_name_from_hosts()?
@@ -950,7 +950,7 @@ impl Session {
                 Ok(true)
             }
             Err(error) => {
-                return Err(anyhow!(
+                Err(anyhow!(
                     "Could not set window option {}: {:#?}",
                     option,
                     error
@@ -1082,7 +1082,7 @@ impl Session {
             Ok(true)
         } else {
             trace!("joining windows in pane {} failed", &first);
-            return Err(anyhow!("Setting layout failed"));
+            Err(anyhow!("Setting layout failed"))
         }
     }
 }
@@ -1229,7 +1229,7 @@ fn parse_line(line: &str, replace: &Option<String>, current_dir: &Path) -> Resul
             // string seperated by newline (well, if output contains newlines)
             let cmdout = String::from_utf8(
                 Command::new(&cmd)
-                    .current_dir(&current_dir)
+                    .current_dir(current_dir)
                     .args(&args)
                     .output()?
                     .stdout,
@@ -1353,12 +1353,12 @@ fn main() -> Result<()> {
                 Err(val) => error!("Error: {val}"),
             }
         };
-    } else if cli.sshhosts != None || cli.multihosts != None {
+    } else if cli.sshhosts.is_some() || cli.multihosts.is_some() {
         trace!("Session connecting somewhere");
         if session.exists() {
             session.attach()?;
         } else {
-            if cli.sshhosts != None {
+            if cli.sshhosts.is_some() {
                 // sshhosts -> Multiple windows, not synced input
                 session.synced = false;
             } else {
@@ -1396,7 +1396,7 @@ fn main() -> Result<()> {
     // the above and the following, so:
     // FIXME: Merge the above if and the match here, somehow, dedupe
     // the code.
-    if cli.command != None {
+    if cli.command.is_some() {
         match &cli.command.as_ref().unwrap() {
             Commands::Ls {} => {
                 let stdout = io::stdout();
