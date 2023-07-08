@@ -39,6 +39,7 @@ use std::{
     io::{self, BufRead, BufReader, BufWriter, Write},
     path::{Path, PathBuf},
     process::Command,
+    process::Stdio,
 };
 use tmux_interface::{
     AttachSession, BreakPane, HasSession, JoinPane, KillSession, ListPanes, ListSessions,
@@ -441,6 +442,8 @@ impl Session {
     fn realkill(&self, tokill: &str) -> Result<bool> {
         trace!("session.realkill()");
         if Tmux::with_command(HasSession::new().target_session(tokill))
+            .into_command()
+            .stderr(Stdio::null())
             .status()?
             .success()
         {
@@ -471,6 +474,8 @@ impl Session {
     #[tracing::instrument(level = "debug", ret)]
     fn exists(&self) -> bool {
         Tmux::with_command(HasSession::new().target_session(&self.sesname))
+            .into_command()
+            .stderr(Stdio::null())
             .status()
             .unwrap()
             .success()
@@ -949,13 +954,11 @@ impl Session {
                 debug!("Window option successfully set");
                 Ok(true)
             }
-            Err(error) => {
-                Err(anyhow!(
-                    "Could not set window option {}: {:#?}",
-                    option,
-                    error
-                ))
-            }
+            Err(error) => Err(anyhow!(
+                "Could not set window option {}: {:#?}",
+                option,
+                error
+            )),
         }
     }
 
