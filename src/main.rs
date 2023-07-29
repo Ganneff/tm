@@ -27,10 +27,11 @@ use anyhow::{anyhow, Result};
 use clap::{Parser, Subcommand};
 use directories::UserDirs;
 use fehler::{throw, throws};
-use home_dir::HomeDirExt;
+//use home_dir::HomeDirExt;
 use itertools::Itertools;
 use rand::distributions::Alphanumeric;
 use rand::{thread_rng, Rng};
+//use shellexpand::full;
 use shlex::Shlex;
 use std::{
     env,
@@ -688,15 +689,18 @@ impl Session {
                             if line.contains("new-window") {
                                 tmwin += 1;
                             }
-                            let modline = line
-                                .replace("SESSION", &self.sesname)
-                                .replace("$HOME", "~/")
-                                .replace("${HOME}", "~/")
-                                .replace("TMWIN", &tmwin.to_string())
-                                .expand_home()?
-                                .into_os_string()
-                                .into_string()
-                                .expect("String convert failed");
+                            let modline = shellexpand::full(
+                                &line
+                                    .replace("SESSION", &self.sesname)
+                                    .replace("$HOME", "~/")
+                                    .replace("${HOME}", "~/")
+                                    .replace("TMWIN", &tmwin.to_string()),
+                            )?
+                            .to_string();
+                            // .expand_home()?
+                            // .into_os_string()
+                            // .into_string()
+                            // .expect("String convert failed");
                             self.targets.push(modline);
                         }
                     }
@@ -1189,26 +1193,19 @@ fn parse_line(line: &str, replace: &Option<String>, current_dir: &Path) -> Resul
             // but obviously people may mistype and have a single LIST
             // in a line.
             // Also, ~ and $HOME/${HOME} expansion are supported.
-            let cmd: String = cmdparser
-                .next()
-                .ok_or_else(|| anyhow!("Empty LIST found - no command given"))?
-                .replace("$HOME", "~/")
-                .replace("${HOME}", "~/")
-                .expand_home()?
-                .into_os_string()
-                .into_string()
-                .expect("String convert failed");
+            let cmd: String = shellexpand::full(
+                &cmdparser
+                    .next()
+                    .ok_or_else(|| anyhow!("Empty LIST found - no command given"))?
+                    .replace("$HOME", "~/")
+                    .replace("${HOME}", "~/"),
+            )?
+            .to_string();
             // Next we want the arguments.
             // Also, ~ and $HOME/${HOME} expansion are supported.
             let args: Vec<String> = cmdparser
                 .map(|l| l.replace("$HOME", "~/").replace("${HOME}", "~/"))
-                .map(|l| {
-                    l.expand_home()
-                        .expect("Could not successfully expand ~ for arguments of LIST call")
-                        .into_os_string()
-                        .into_string()
-                        .expect("String convert failed")
-                })
+                .map(|l| shellexpand::full(&l).expect("Could not expand").to_string())
                 .collect();
             debug!("cmd is {}", cmd);
             debug!("args are {:?}", args);

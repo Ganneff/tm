@@ -47,7 +47,7 @@ Need to adapt docs from the old [README.org](old/README.org) to here.
 - [X] k  - kill session
 - [X] -n - Open sessions to same hosts as existing session instead of
       just attaching to that existing session
-- [X] Support same environment variables as shell tm
+- [X] Support same environment variables as shell tm (supports any now)
 - [X] Simple config files (no ending)
   - [X] Allows LIST command, recursively
   - [X] Support ++TMREPLACETM++
