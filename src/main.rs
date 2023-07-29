@@ -46,7 +46,7 @@ use tmux_interface::{
     ListWindows, NewSession, NewWindow, RunShell, SelectLayout, SetOption, ShowOptions,
     SplitWindow, Tmux,
 };
-use tracing::{debug, error, info, trace, warn};
+use tracing::{debug, error, event, info, trace, warn, Level};
 use tracing_subscriber::FmtSubscriber;
 
 #[derive(Debug, Parser)]
@@ -286,14 +286,12 @@ impl Cli {
     /// It also "cleans" the session name, that is, it replaces
     /// spaces, :, " and . with _ (underscores).
     #[throws(anyhow::Error)]
-    #[tracing::instrument(level = "debug", ret)]
+    #[tracing::instrument(level = "trace", ret, err, skip(self), fields(name, second = self.second))]
     fn session_name_from_hosts(&self) -> String {
-        trace!("In session_name_from_hosts");
         let mut hosts = self.get_hosts()?;
-        trace!(
+        debug!(
             "Need to build session name from: {:?}, TMSESSHOST: {}",
-            hosts,
-            *TMSESSHOST
+            hosts, *TMSESSHOST
         );
 
         if *TMSORT {
@@ -304,23 +302,22 @@ impl Cli {
         if self.second {
             let mut rng = rand::thread_rng();
             let insert: u16 = rng.gen();
-            trace!(
+            debug!(
                 "Second session wanted, inserting {} into session name",
                 insert
             );
             hosts.insert(1, insert.to_string());
         }
         let name = hosts.join("_");
-        debug!("Generated session name: {}", name);
+        tracing::Span::current().record("name", &name);
         name
     }
 
     /// Find (and set) a session name. Appears we have many
     /// possibilities to get at one, depending how we are called.
     #[throws(anyhow::Error)]
-    #[tracing::instrument(level = "debug", ret)]
+    #[tracing::instrument(level = "trace", skip(self), ret, err, err)]
     fn find_session_name(&self, session: &mut Session) -> String {
-        trace!("find_session_name");
         let possiblename: String = {
             if self.kill.is_some() {
                 self.kill.clone().unwrap()
@@ -354,7 +351,7 @@ impl Cli {
 
     /// Returns a string depending on subcommand called, to adjust
     /// session name with.
-    #[tracing::instrument(level = "debug", ret)]
+    #[tracing::instrument(level = "trace", skip(self), ret)]
     #[throws(anyhow::Error)]
     fn get_insert(&self) -> String {
         match &self.sshhosts {
@@ -374,7 +371,7 @@ impl Cli {
     ///
     /// The list can either be from the s or ms command.
     #[throws(anyhow::Error)]
-    #[tracing::instrument(level = "debug", ret)]
+    #[tracing::instrument(level = "trace", skip(self), ret, err)]
     fn get_hosts(&self) -> Vec<String> {
         match &self.sshhosts {
             Some(v) => v.to_vec(),
@@ -426,11 +423,10 @@ struct Session {
 
 impl Session {
     /// Takes a string, applies some cleanup, then stores it as
-    /// session name, returning the cleaned up value
-    #[tracing::instrument(level = "debug")]
+    /// session name, ret, errurning the cleaned up value
+    #[tracing::instrument(level = "trace")]
     #[throws(anyhow::Error)]
     fn set_name(&mut self, newname: &str) -> &String {
-        trace!("Session.set_name(), input: {}", newname);
         // Replace a set of characters we do not want in the session name with _
         self.sesname = newname.replace(&[' ', ':', '"', '.'][..], "_");
         trace!("Session name now: {}", self.sesname);
@@ -438,9 +434,8 @@ impl Session {
     }
 
     /// Kill session
-    #[tracing::instrument(level = "debug", ret)]
+    #[tracing::instrument(level = "trace", ret, err)]
     fn realkill(&self, tokill: &str) -> Result<bool> {
-        trace!("session.realkill()");
         if Tmux::with_command(HasSession::new().target_session(tokill))
             .into_command()
             .stderr(Stdio::null())
@@ -465,13 +460,13 @@ impl Session {
     }
 
     /// Kill current known session
-    #[tracing::instrument(level = "info", ret)]
+    #[tracing::instrument(level = "trace", ret, err)]
     fn kill(&self) -> Result<bool> {
         self.realkill(&self.sesname)
     }
 
     /// Check if a session exists
-    #[tracing::instrument(level = "debug", ret)]
+    #[tracing::instrument(level = "trace", ret)]
     fn exists(&self) -> bool {
         Tmux::with_command(HasSession::new().target_session(&self.sesname))
             .into_command()
@@ -482,9 +477,8 @@ impl Session {
     }
 
     /// Attach to a running (or just prepared) tmux session
-    #[tracing::instrument(level = "debug", ret)]
+    #[tracing::instrument(level = "trace", ret, err, skip(self), fields(self.sesname))]
     fn attach(&mut self) -> Result<bool> {
-        trace!("Entering attach()");
         let ret = if self.exists() {
             if self.grouped {
                 let mut rng = rand::thread_rng();
@@ -534,7 +528,6 @@ impl Session {
         } else {
             false
         };
-        trace!("Leaving attach with result {}", ret);
         Ok(ret)
     }
 
@@ -623,9 +616,8 @@ impl Session {
     /// set-window-option -t SESSION:TMWIN automatic-rename off
     /// set-window-option -t SESSION:TMWIN allow-rename off
     /// ```
-    #[tracing::instrument(level = "debug", ret)]
+    #[tracing::instrument(level = "trace", ret, err)]
     fn read_session_file_and_attach(&mut self) -> Result<()> {
-        trace!("Entering read_session_file");
         // Get the path of the session file
         let sesfile = self.sesfile.clone();
         let sesfilepath = sesfile.parent().ok_or_else(|| {
@@ -734,11 +726,8 @@ impl Session {
     /// them using tmux run-shell ability. Whatever the user setup in
     /// .cfg is executed - provided that tmux(1) knows it, ie. it is a
     /// valid tmux command.
-    #[tracing::instrument(level = "debug", ret)]
+    #[tracing::instrument(level = "trace", ret, err)]
     fn setup_extended_session(&mut self) -> Result<bool> {
-        trace!("Entering setup_extended_session");
-        debug!("Creating session {}", self.sesname);
-
         if self.targets.is_empty() {
             return Err(anyhow!("No targets setup, can not open session"));
         }
@@ -795,11 +784,8 @@ impl Session {
     ///
     /// Depending on value of session field [Session::synced] it will
     /// setup multiple windows, or one window with multiple panes.
-    #[tracing::instrument(level = "debug", ret)]
+    #[tracing::instrument(level = "trace", ret, err, skip(self), fields(self.sesname, self.targets))]
     fn setup_simple_session(&mut self) -> Result<bool> {
-        trace!("Entering setup_simple_session");
-        debug!("Creating session {}", self.sesname);
-
         if self.targets.is_empty() {
             return Err(anyhow!("No targets setup, can not open session"));
         }
@@ -814,6 +800,7 @@ impl Session {
                 .shell_command(format!("{} {}", *TMSSHCMD, &self.targets[0])),
         )
         .status()?;
+        trace!("Session started");
 
         // Which window are we at? Start with TMWIN, later on count up (if
         // we open more than one)
@@ -823,6 +810,7 @@ impl Session {
 
         // Next check if there was more than one host, if so, open windows/panes
         // for them too.
+        debug!(?self.targets);
         if self.targets.len() >= 2 {
             debug!("Got more than 1 target");
             let mut others = self.targets.clone().into_iter();
@@ -841,9 +829,10 @@ impl Session {
                             // split pane
                             let output = Tmux::with_command(
                                 SplitWindow::new()
-                                    .size(&tmux_interface::commands::PaneSize::Percentage(1))
                                     .detached()
                                     .target_window(&self.sesname)
+                                    .size(&tmux_interface::commands::PaneSize::Percentage(1))
+                                    .target_pane(format!("{}:1", self.sesname))
                                     .shell_command(format!("{} {}", *TMSSHCMD, &target)),
                             )
                             .output()?;
@@ -936,9 +925,8 @@ impl Session {
     /// session.setwinopt(windowindex, "automatic-rename", "off");
     /// # }
     /// ```
-    #[tracing::instrument(level = "debug", ret)]
+    #[tracing::instrument(level = "trace", ret, err, skip(self))]
     fn setwinopt(&mut self, index: u32, option: &str, value: &str) -> Result<bool> {
-        trace!("setwinopt");
         let target = format!("{}:{}", self.sesname, index);
         debug!("Setting Window ({}) option {} to {}", target, option, value);
         match Tmux::with_command(
@@ -964,7 +952,7 @@ impl Session {
 
     /// Break a session with many panes in one window into one with
     /// many windows.
-    #[tracing::instrument(level = "debug", ret)]
+    #[tracing::instrument(level = "trace", ret, err)]
     fn break_panes(&mut self) -> Result<bool> {
         // List of panes
         let panes: Vec<(String, String)> = String::from_utf8(
@@ -1005,7 +993,7 @@ impl Session {
     }
 
     /// Join many windows into one window with many panes
-    #[tracing::instrument(level = "debug", ret)]
+    #[tracing::instrument(level = "trace", ret, err)]
     fn join_windows(&mut self) -> Result<bool> {
         let windowlist: Vec<String> = String::from_utf8(
             Tmux::with_command(
@@ -1155,20 +1143,18 @@ lazy_static! {
 /// Run ls
 ///
 /// Simply runs `tmux list-sessions`
-#[tracing::instrument(level = "debug", skip(handle), ret)]
+#[tracing::instrument(level = "trace", skip(handle), ret, err)]
 fn ls<W: Write>(handle: &mut BufWriter<W>) -> Result<()> {
-    trace!("Entering ls");
     let sessions = Tmux::with_command(ListSessions::new())
         .output()?
         .to_string();
     writeln!(handle, "{sessions}")?;
-    trace!("Leaving ls");
     Ok(())
 }
 
 /// Tiny helper to replace the magic ++TMREPLACETM++
 #[doc(hidden)]
-#[tracing::instrument(level = "debug", ret)]
+#[tracing::instrument(level = "trace", ret, err)]
 fn tmreplace(input: &str, replace: &Option<String>) -> Result<String> {
     match replace {
         Some(v) => Ok(input.replace("++TMREPLACETM++", v)),
@@ -1182,9 +1168,8 @@ fn tmreplace(input: &str, replace: &Option<String>) -> Result<String> {
 /// if that contains LIST again, recurse.
 ///
 /// Return all found hostnames.
-#[tracing::instrument(level = "debug", ret)]
+#[tracing::instrument(level = "trace", ret, err)]
 fn parse_line(line: &str, replace: &Option<String>, current_dir: &Path) -> Result<Vec<String>> {
-    trace!("Entered parse_line");
     // We are interested in the first word to decide what we see
     let first = line.split_whitespace().next();
     match first {
@@ -1272,9 +1257,9 @@ fn parse_line(line: &str, replace: &Option<String>, current_dir: &Path) -> Resul
 /// main, start it all off
 fn main() -> Result<()> {
     let cli = Cli::parse();
-    let subscriber = FmtSubscriber::builder()
+    let filter = cli.verbose.log_level_filter();
+    let subscriberbuild = FmtSubscriber::builder()
         .with_max_level({
-            let filter = cli.verbose.log_level_filter();
             match filter {
                 log::LevelFilter::Off => tracing_subscriber::filter::LevelFilter::OFF,
                 log::LevelFilter::Error => tracing_subscriber::filter::LevelFilter::ERROR,
@@ -1288,24 +1273,34 @@ fn main() -> Result<()> {
         .with_target(true)
         .with_file(true)
         .with_line_number(true)
-        .with_span_events(
-            tracing_subscriber::fmt::format::FmtSpan::ENTER
-                | tracing_subscriber::fmt::format::FmtSpan::CLOSE,
-        )
-        //        .pretty()
-        .finish();
+        .pretty();
+
+    let subscriber = match filter {
+        log::LevelFilter::Trace => subscriberbuild
+            .with_span_events(
+                tracing_subscriber::fmt::format::FmtSpan::ACTIVE
+                    | tracing_subscriber::fmt::format::FmtSpan::CLOSE,
+            )
+            .finish(),
+        _ => subscriberbuild
+            .with_span_events(tracing_subscriber::fmt::format::FmtSpan::ACTIVE)
+            .finish(),
+    };
 
     tracing::subscriber::set_global_default(subscriber).expect("setting default subscriber failed");
 
-    trace!("Program started");
-    debug!("Cli options: {:#?}", cli);
-    debug!("TMPDIR: {}", *TMPDIR);
-    debug!("TMSORT: {}", *TMSORT);
-    debug!("TMOPTS: {}", *TMOPTS);
-    debug!("TMDIR: {:?}", *TMDIR);
-    debug!("TMSESSHOST: {}", *TMSESSHOST);
-    debug!("TMSSHCMD: {}", *TMSSHCMD);
-    debug!("TMWIN: {}", *TMWIN);
+    info!("Program started");
+    event!(
+        Level::DEBUG,
+        cli = ?cli,
+        TMPDIR = *TMPDIR,
+        TMSORT = *TMSORT,
+        TMOPTS =*TMOPTS,
+        TMDIR = ?*TMDIR,
+        TMSESSHOST = *TMSESSHOST,
+        TMSSHCMD = *TMSSHCMD,
+        TMWIN = *TMWIN,
+    );
 
     let mut session = Session {
         ..Default::default()

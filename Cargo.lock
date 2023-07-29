@@ -728,9 +728,9 @@ dependencies = [
 
 [[package]]
 name = "tmux_interface"
-version = "0.3.0"
+version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f7531672e66853f3db663ba8cb741fdb86d50ee44283c9a6bbb82dbbc34fd3ec"
+checksum = "db92951877a432e10706c6c101f9e1f8ff4ea3d92df2903ae776d84cf9ca0bce"
 
 [[package]]
 name = "tracing"
