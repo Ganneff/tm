@@ -21,24 +21,14 @@ tm still tries to support both commandline styles that the shell
 script did, that is it can both do the "subcommand" style
 (traditional) as well as "getopts" style of old tm.
 
-### Verbosity
-The more -v given, the more log output will appear.
-| Verbosity Level | Output                                             |
-|-----------------+----------------------------------------------------|
-| No arg, ERROR   | Error messages                                     |
-| -v, WARN        | Warning messages                                   |
-| -vv, INFO       | Informational messages                             |
-| -vvv, DEBUG     | Debug messages, including variable contents        |
-| -vvvv, TRACE    | Trace messages, includes function call information |
-
-
-# More documentation
-Need to adapt docs from the old [README.org](old/README.org) to here.
+# Documentation
+A way more detailed documentation is written in "mdbook" style,
+available at [tmbook](https://ganneff.github.io/tmbook/).
 
 # Status
 - [X] Commandline parsing
 - [X] Attach to existing sessions
-  - [ ] Attach to existing, but "grouped" (seperate window config)
+  - [X] Attach to existing, but "grouped" (seperate window config)
 - [X] ls - list sessions
 - [X] s  - create new session, open SSH directly to one ore more hosts,
       many windows
