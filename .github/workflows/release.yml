@@ -12,7 +12,7 @@ jobs:
   create-release:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - uses: taiki-e/create-gh-release-action@v1
         with:
           # Only create releases based on main branch
@@ -31,7 +31,7 @@ jobs:
             os: macos-latest
     runs-on: ${{ matrix.os || 'ubuntu-latest' }}
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - uses: taiki-e/upload-rust-binary-action@v1
         with:
           bin: tm
