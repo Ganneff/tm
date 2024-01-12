@@ -2,7 +2,7 @@
 
 This is the second version of my tmux helper _tm_, used to ease my
 day-to-day work with [tmux](https://github.com/tmux/tmux/wiki).
-It is a rewrite in Rust, as I want to learn more Rust. Accidently that
+It is a rewrite in Rust, as I want to learn more Rust. Accidentally that
 made it much faster too, which is nice.
 
 The rewrite is intended to be, as much as possible, a drop-in
@@ -28,11 +28,11 @@ available at [tmbook](https://ganneff.github.io/tmbook/).
 # Status
 - [X] Commandline parsing
 - [X] Attach to existing sessions
-  - [X] Attach to existing, but "grouped" (seperate window config)
+  - [X] Attach to existing, but "grouped" (separate window config)
 - [X] ls - list sessions
-- [X] s  - create new session, open SSH directly to one ore more hosts,
+- [X] s  - create new session, open SSH directly to one or more hosts,
       many windows
-- [X] ms - create new session, open SSH directly to one ore more
+- [X] ms - create new session, open SSH directly to one or more
       hosts, one window with many panes, synchronized input.
 - [X] k  - kill session
 - [X] -n - Open sessions to same hosts as existing session instead of
@@ -71,7 +71,7 @@ the shell variant from earlier, this is not entirely possible. Shell
 there, for whatever reason, just don't work when using a compiled
 binary now, as they depend on shell internal behaviour.
 
-The folowing is a (possibly) incomplete list of known behaviour
+The following is a (possibly) incomplete list of known behaviour
 changes.
 
 ## LIST commands using ssh possibly requiring pseudo-terminal

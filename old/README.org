@@ -109,7 +109,7 @@ The environment variable TMSSHCMD can be used to alter the default ssh
 command and its options used by tm globally. By default it is a plain
 "ssh". Inside an extensionless TMDIR file and on hosts added to the
 list using the LIST option described above, ssh options can be set by
-simply appending them, space seperated, after the hostname. So the
+simply appending them, space separated, after the hostname. So the
 hostlist
 #+BEGIN_QUOTE
 user@ws01
