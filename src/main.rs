@@ -74,7 +74,7 @@ struct Cli {
     /// ssh://\[user@]hostname\[:port].
     ///
     /// When multiple destinations are specified, they are all opened
-    /// into seperate tmux windows (not sessions!).
+    /// into separate tmux windows (not sessions!).
     #[clap(short = 's', display_order = 15, num_args = 1..)]
     sshhosts: Option<Vec<String>>,
 
@@ -98,7 +98,7 @@ struct Cli {
     second: bool,
 
     /// Group session - attach to an existing session, but keep
-    /// seperate window config
+    /// separate window config
     ///
     /// This will show the same set of windows, but allow different
     /// handling of the session according to client. This way one
@@ -122,7 +122,7 @@ struct Cli {
     /// Either plain tmux session name, or session/file found in TMDIR
     ///
     /// If this exists as a tmux session, it behaves like `tmux
-    /// attach`. Otherwise it checks TMDIR for existance of a config
+    /// attach`. Otherwise it checks TMDIR for existence of a config
     /// file and will open a session as specified in there.
     #[clap(display_order = 50)]
     session: Option<String>,
@@ -152,7 +152,7 @@ enum Commands {
     /// Open SSH session to the destination
     ///
     /// When multiple destinations are specified, they are all opened
-    /// into seperate tmux windows (not sessions!).
+    /// into separate tmux windows (not sessions!).
     #[clap(display_order = 15)]
     S {
         /// Target destinations for `ssh(1)`, which may be specified as
@@ -405,7 +405,7 @@ struct Session {
     /// Should this be "grouped" - shares the same set of windows, new
     /// windows are linked to all sessions in the group, any window
     /// closed is removed from all sessions. But sessions are
-    /// seperate, as are their current/previous window and session
+    /// separate, as are their current/previous window and session
     /// options.
     grouped: bool,
     /// The session name when grouped
@@ -1085,7 +1085,7 @@ impl Session {
 // A bunch of "static" variables, though computed at program start, as they
 // depend on the users environment.
 lazy_static! {
-    ///  We want a useful tmpdir, so set one if it isn't already. Thats
+    ///  We want a useful tmpdir, so set one if it isn't already. That's
     ///  the place where tmux puts its socket, so you want to ensure it
     ///  doesn't change under your feet - like for those with a
     ///  daily-changing tmpdir in their home...
@@ -1211,7 +1211,7 @@ fn parse_line(line: &str, replace: &Option<String>, current_dir: &Path) -> Resul
             debug!("args are {:?}", args);
 
             // Our process spawner, pleased to hand us results as a nice
-            // string seperated by newline (well, if output contains newlines)
+            // string separated by newline (well, if output contains newlines)
             let cmdout = String::from_utf8(
                 Command::new(&cmd)
                     .current_dir(current_dir)
