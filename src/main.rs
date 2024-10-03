@@ -1146,11 +1146,11 @@ lazy_static! {
 /// Simply runs `tmux list-sessions`
 #[tracing::instrument(level = "trace", skip(handle), ret, err)]
 fn ls<W: Write>(handle: &mut BufWriter<W>) -> Result<()> {
-    let sessions = Tmux::with_command(ListSessions::new())
-        .output()?
-        .to_string();
-    writeln!(handle, "{sessions}")?;
-    Ok(())
+    Ok(writeln!(
+        handle,
+        "{}",
+        Tmux::with_command(ListSessions::new()).output()?
+    )?)
 }
 
 /// Tiny helper to replace the magic ++TMREPLACETM++
