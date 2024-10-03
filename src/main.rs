@@ -48,7 +48,7 @@ use tmux_interface::{
     SplitWindow, Tmux,
 };
 use tracing::{debug, error, event, info, trace, warn, Level};
-use tracing_subscriber::FmtSubscriber;
+use tracing_subscriber::{fmt::time::ChronoLocal, FmtSubscriber};
 
 #[derive(Debug, Parser)]
 #[clap(author, version, about)]
@@ -1246,6 +1246,9 @@ fn parse_line(line: &str, replace: &Option<String>, current_dir: &Path) -> Resul
     }
 }
 
+static VERSION: &str = env!("CARGO_PKG_VERSION");
+static APPLICATION: &str = env!("CARGO_PKG_NAME");
+
 // Can't sensibly test main()
 #[cfg(not(tarpaulin_include))]
 /// main, start it all off
@@ -1267,6 +1270,7 @@ fn main() -> Result<()> {
         .with_target(true)
         .with_file(true)
         .with_line_number(true)
+        .with_timer(ChronoLocal::rfc_3339())
         .pretty();
 
     let subscriber = match filter {
@@ -1283,7 +1287,7 @@ fn main() -> Result<()> {
 
     tracing::subscriber::set_global_default(subscriber).expect("setting default subscriber failed");
 
-    info!("Program started");
+    info!("Starting {APPLICATION}, version {VERSION}");
     event!(
         Level::DEBUG,
         msg = "Program started",
