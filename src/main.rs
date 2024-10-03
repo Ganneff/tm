@@ -346,7 +346,7 @@ impl Cli {
                 "Unhandled command so unknown session name".to_string()
             }
         };
-        session.set_name(&possiblename)?;
+        session.set_name(&possiblename);
         session.name.to_string()
     }
 
@@ -426,7 +426,6 @@ impl Session {
     /// Takes a string, applies some cleanup, then stores it as
     /// session name, returning the cleaned up value
     #[tracing::instrument(level = "trace")]
-    #[throws(anyhow::Error)]
     fn set_name(&mut self, newname: &str) {
         // Replace a set of characters we do not want in the session name with _
         self.name = newname.replace(&[' ', ':', '"', '.'][..], "_");
@@ -662,7 +661,7 @@ impl Session {
                     // as that session name. So we check again, and if
                     // a session name like this already exists, we try
                     // attaching to it.
-                    self.set_name(&line)?;
+                    self.set_name(&line);
                     if self.exists() {
                         info!("Session matches existing one, attaching");
                         self.attach()?;
@@ -1716,19 +1715,14 @@ mod tests {
             ..Default::default()
         };
 
-        assert_eq!("test", session.set_name("test").unwrap());
-        assert_eq!("test_second", session.set_name("test second").unwrap());
-        assert_eq!("test_third", session.set_name("test:third").unwrap());
-        assert_eq!(
-            "test_fourth_fifth",
-            session.set_name("test fourth fifth").unwrap()
-        );
-        assert_eq!(
-            "test_fourth_fifth_more_words_here_set_in",
-            session
-                .set_name("test fourth_fifth:more words here\"set in")
-                .unwrap()
-        );
+        session.set_name("test");
+        assert_eq!("test", session.name);
+        session.set_name("test second");
+        assert_eq!("test_second", session.name);
+        session.set_name("test:third");
+        assert_eq!("test_third", session.name);
+        session.set_name("test_fourth_fifth_more_words_here\"set_in");
+        assert_eq!("test_fourth_fifth_more_words_here_set_in", session.name);
     }
 
     #[test]
@@ -1756,7 +1750,7 @@ mod tests {
             ..Default::default()
         };
         // We want a new session
-        session.set_name("fakeattach").unwrap();
+        session.set_name("fakeattach");
         // Shouldn't exist
         assert!(!session.exists());
         // Lets create it
@@ -1788,7 +1782,7 @@ mod tests {
 
         assert!(!session.exists());
         // And now we test something that shouldn't work for attach
-        session.set_name("notfakeattach").unwrap();
+        session.set_name("notfakeattach");
         // Not grouped
         session.grouped = false;
         // Shouldn't exist
@@ -1815,7 +1809,7 @@ mod tests {
         let mut session = Session {
             ..Default::default()
         };
-        session.set_name("tmtestsession").unwrap();
+        session.set_name("tmtestsession");
         assert!(!session.exists());
         Tmux::with_command(
             NewSession::new()
@@ -1905,7 +1899,7 @@ mod tests {
         let mut session = Session {
             ..Default::default()
         };
-        session.set_name("testextended").unwrap();
+        session.set_name("testextended");
         // Fail, we have no data in session.targets yet
         assert!(session.setup_extended_session().is_err());
 
