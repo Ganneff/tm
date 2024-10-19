@@ -586,7 +586,7 @@ impl Session {
         match Tmux::with_command(
             SetOption::new()
                 .window()
-                .target(&target)
+                .target_pane(&target)
                 .option(option)
                 .value(value),
         )
