@@ -32,3 +32,6 @@ tracing-subscriber = { features = ["fmt", "ansi", "tracing-log", "chrono", "smal
 
 [dev-dependencies]
 regex = "1.10"
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ["cfg(tarpaulin_include)"] }
