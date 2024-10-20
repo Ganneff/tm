@@ -20,10 +20,9 @@
 
 #![warn(missing_docs)]
 
-#[macro_use]
-extern crate lazy_static;
-
 mod config;
+#[macro_use]
+mod fromenvstatic;
 mod session;
 
 use crate::config::{Cli, Commands};
@@ -38,146 +37,76 @@ use std::{
     io::{self, BufWriter, Write},
     path::Path,
     process::Command,
+    sync::LazyLock,
 };
 use tmux_interface::{ListSessions, NewSession, ShowOptions, Tmux};
 use tracing::{debug, error, event, info, trace, warn, Level};
 use tracing_subscriber::{fmt::time::ChronoLocal, FmtSubscriber};
 
 ////////////////////////////////////////////////////////////////////////
-// Macros
-////////////////////////////////////////////////////////////////////////
-/// Help setting up static variables based on user environment.
-///
-/// We allow the user to configure certain properties/behaviours of tm
-/// using environment variables. To reduce boilerplate in code, we use a
-/// macro for setting them. We use [mod@`lazy_static`] to define them as
-/// global variables, so they are available throughout the whole program -
-/// they aren't going to change during runtime, ever, anyways.
-///
-/// # Examples
-///
-/// ```
-/// # fn main() {
-/// static ref TMPDIR: String = fromenvstatic!(asString "TMPDIR", "/tmp");
-/// static ref TMSORT: bool = fromenvstatic!(asBool "TMSORT", true);
-/// static ref TMWIN: u8 = fromenvstatic!(asU32 "TMWIN", 1);
-/// # }
-/// ```
-macro_rules! fromenvstatic {
-    (asString $envvar:literal, $default:expr) => {
-        match env::var($envvar) {
-            Ok(val) => val,
-            Err(_) => $default.to_string(),
-        }
-    };
-    (asBool $envvar:literal, $default:literal) => {
-        match env::var($envvar) {
-            Ok(val) => match val.to_ascii_lowercase().as_str() {
-                "true" => true,
-                "false" => false,
-                &_ => {
-                    // Test run as "cargo test -- --nocapture" will print this
-                    if cfg!(test) {
-                        println!(
-                            "Variable {} expects true or false, not {}, assuming {}",
-                            $envvar, val, $default
-                        );
-                    }
-                    error!(
-                        "Variable {} expects true or false, not {}, assuming {}",
-                        $envvar, val, $default
-                    );
-                    return $default;
-                }
-            },
-            Err(_) => $default,
-        }
-    };
-    (asU32 $envvar:literal, $default:literal) => {
-        match env::var($envvar) {
-            Ok(val) => {
-                return val.parse::<u32>().unwrap_or_else(|err| {
-                    if cfg!(test) {
-                        println!(
-                            "Couldn't parse variable {} (value: {}) as number (error: {}), assuming {}",
-                            $envvar, val, err, $default
-                        );
-                    }
-                    error!(
-                        "Couldn't parse variable {} (value: {}) as number (error: {}), assuming {}",
-                        $envvar, val, err, $default
-                    );
-                    $default
-                });
-            }
-            Err(_) => $default,
-        }
-    };
-}
-
-////////////////////////////////////////////////////////////////////////
 
 // A bunch of "static" variables, though computed at program start, as they
 // depend on the users environment.
-lazy_static! {
-    ///  We want a useful tmpdir, so set one if it isn't already. That's
-    ///  the place where tmux puts its socket, so you want to ensure it
-    ///  doesn't change under your feet - like for those with a
-    ///  daily-changing tmpdir in their home...
-    static ref TMPDIR: String = fromenvstatic!(asString "TMPDIR", "/tmp");
+///  We want a useful tmpdir, so set one if it isn't already. That's
+///  the place where tmux puts its socket, so you want to ensure it
+///  doesn't change under your feet - like for those with a
+///  daily-changing tmpdir in their home...
+static TMPDIR: LazyLock<String> = LazyLock::new(|| fromenvstatic!(asString "TMPDIR", "/tmp"));
 
-    /// Do you want me to sort the arguments when opening an
-    /// ssh/multi-ssh session? The only use of the sorted list is for
-    /// the session name, to allow you to get the same session again no
-    /// matter how you order the hosts on commandline.
-    static ref TMSORT: bool = fromenvstatic!(asBool "TMSORT", true);
+/// Do you want me to sort the arguments when opening an
+/// ssh/multi-ssh session? The only use of the sorted list is for
+/// the session name, to allow you to get the same session again no
+/// matter how you order the hosts on commandline.
+static TMSORT: LazyLock<bool> = LazyLock::new(|| fromenvstatic!(asBool "TMSORT", true));
 
-    /// Want some extra options given to tmux? Define TMOPTS in your
-    /// environment. Note, this is only used in the final tmux call
-    /// where we actually attach to the session!
-    static ref TMOPTS: String = fromenvstatic!(asString "TMOPTS", "-2");
+/// Want some extra options given to tmux? Define TMOPTS in your
+/// environment. Note, this is only used in the final tmux call
+/// where we actually attach to the session!
+static TMOPTS: LazyLock<String> = LazyLock::new(|| fromenvstatic!(asString "TMOPTS", "-2"));
 
-    /// The following directory can hold session config for us, so you
-    /// can use it as a shortcut.
-    static ref TMDIR: OsString = if let Some(user_dirs) = UserDirs::new() {
-        Path::join(
-            user_dirs.home_dir(),
-            Path::new(".tmux.d"))
-        .into_os_string()
+/// The following directory can hold session config for us, so you
+/// can use it as a shortcut.
+static TMDIR: LazyLock<OsString> = LazyLock::new(|| {
+    if let Some(user_dirs) = UserDirs::new() {
+        Path::join(user_dirs.home_dir(), Path::new(".tmux.d")).into_os_string()
     } else {
         error!("No idea where your homedir is, using /tmp");
         Path::new("/tmp").as_os_str().to_owned()
-    };
+    }
+});
 
-    /// Prepend the hostname to autogenerated session names?
-    ///
-    /// Example: Call `tm ms host1 host2`.
-    /// * TMSESSHOST=true  -> session name is `HOSTNAME_host1_host2`
-    /// * TMSESSHOST=false -> session name is `host1_host2`
-    static ref TMSESSHOST: bool = fromenvstatic!(asBool "TMSESSHOST", false);
+/// Prepend the hostname to autogenerated session names?
+///
+/// Example: Call `tm ms host1 host2`.
+/// * TMSESSHOST=true  -> session name is `HOSTNAME_host1_host2`
+/// * TMSESSHOST=false -> session name is `host1_host2`
+static TMSESSHOST: LazyLock<bool> = LazyLock::new(|| fromenvstatic!(asBool "TMSESSHOST", false));
 
-    /// Allow to globally define a custom ssh command line.
-    static ref TMSSHCMD: String = fromenvstatic!(asString "TMSSHCMD", "ssh");
+/// Allow to globally define a custom ssh command line.
+static TMSSHCMD: LazyLock<String> = LazyLock::new(|| fromenvstatic!(asString "TMSSHCMD", "ssh"));
 
-    /// From where does tmux start numbering its windows. Old shell
-    /// script used a stupid way of config parsing or setting it via
-    /// environment var. We now just use show_options, and in the
-    /// unlikely case this fails, try parsing the old environment var
-    /// TMWIN, and if that doesn't exist (quite likely now), just use
-    /// 1.
-    // FIXME: This depends on a running tmux daemon. None running -> data fetching
-    // fails. Could fix to detect that and start one first, later killing that.
-    static ref TMWIN: u32 = match Tmux::with_command(ShowOptions::new()
-        .global()
-        .quiet()
-        .value()
-        .option("base-index"))
-        .output()
+/// From where does tmux start numbering its windows. Old shell
+/// script used a stupid way of config parsing or setting it via
+/// environment var. We now just use show_options, and in the
+/// unlikely case this fails, try parsing the old environment var
+/// TMWIN, and if that doesn't exist (quite likely now), just use
+/// 1.
+// FIXME: This depends on a running tmux daemon. None running -> data fetching
+// fails. Could fix to detect that and start one first, later killing that.
+static TMWIN: LazyLock<u32> = LazyLock::new(|| {
+    match Tmux::with_command(
+        ShowOptions::new()
+            .global()
+            .quiet()
+            .value()
+            .option("base-index"),
+    )
+    .output()
     {
         Ok(v) => v.to_string().trim().parse().unwrap_or(1),
         Err(_) => fromenvstatic!(asU32 "TMWIN", 1),
-    };
-}
+    }
+});
 
 /// Run ls
 ///
