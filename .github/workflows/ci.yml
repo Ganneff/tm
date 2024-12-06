@@ -72,7 +72,7 @@ jobs:
         with:
           version: '0.22.0'
       - name: Upload to codecov.io
-        uses: codecov/codecov-action@v4.6.0
+        uses: codecov/codecov-action@v5.1.1
         with:
           token: ${{secrets.CODECOV_TOKEN}}
           fail_ci_if_error: false
